@@ -38,6 +38,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/catalog_db
       DB_USERNAME: catalog
       DB_PASSWORD: catalog
+      SPRING_FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/seed-local   # + dữ liệu mẫu (prod không có)
     ports:
       - "127.0.0.1:8082:8080"   # port cố định của catalog (service chạy trong IntelliJ gọi vào đây)
     depends_on:

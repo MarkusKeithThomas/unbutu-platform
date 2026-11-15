@@ -12,8 +12,9 @@
 - API công khai dưới `/api/<domain>/**`; service gọi nhau bằng `http://<service-name>:8080`, URL từ biến môi trường.
 - Log ra stdout dạng JSON ECS, luôn có `trace.id` + `requestId`; gọi service khác chỉ qua `RestClient.Builder`/`WebClient.Builder` được inject (để propagate trace header).
 - 2 môi trường: local (MacBook) và prod (server, qua CI/CD) – không có staging. 2 compose project trên server: `prod` (Funnel → 127.0.0.1:8080), `observability` (ES + Kibana :5601 + Filebeat).
-- Secret chỉ ở `/opt/unbutu-platform/.env` trên server, không commit.
-- Thêm service mới: thêm vào `deploy/compose.local.yml` (port cố định theo bảng trong README, `depends_on` chỉ hạ tầng), tạo `application-local.yml`, thêm database vào `SERVICE_DATABASES`, thêm `PORT_<service>` trong Makefile nếu chưa có.
+- Cấu hình + secret prod (ADR-0004): biến của service khai báo trong repo private `~/pro-ticket-workload` (`prod/services/<svc>/env.yaml`, PR → plan, merge → apply); value chỉ ở AWS Secrets Manager. Không có `.env` gõ tay, không đưa value vào git/Terraform/log. Deploy prod chỉ qua `deploy.sh` (`deploy/scripts/`).
+- `pro-ticket-workload/bootstrap/` chỉ admin apply từ Mac – Claude chuẩn bị `plan -out`, người dùng tự chạy `apply`.
+- Thêm service mới: thêm folder `prod/services/<service>/env.yaml` ở `pro-ticket-workload` + service vào `deploy/compose.app.yml` (`env_file: env/<service>.env`, format raw); thêm vào `deploy/compose.local.yml` (port cố định theo bảng trong README, `depends_on` chỉ hạ tầng), tạo `application-local.yml`, thêm database vào `SERVICE_DATABASES`, thêm `PORT_<service>` trong Makefile nếu chưa có.
 - Làm việc với người dùng: từng bước nhỏ, giải thích mỗi bước, hỏi trước khi cài công cụ hoặc chọn hướng thiết kế.
 - Không bật Tailscale SSH, không đổi ufw/Funnel/sleep config khi chưa hỏi người dùng.
 - Khi hạ tầng hoặc quyết định thay đổi, cập nhật `ARCHITECTURE.md` (gồm mục "Quyết định").
