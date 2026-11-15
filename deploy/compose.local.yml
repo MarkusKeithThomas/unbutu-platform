@@ -1,6 +1,9 @@
 # Chạy hệ thống trong container trên máy dev (mỗi service = 1 container, giống server).
 # Trước khi up: build jar →  ./gradlew build
-# Chạy:                      docker compose -f deploy/compose.local.yml up --build -d
+# Chạy:                      docker compose -f deploy/compose.local.yml up --build -d   (hoặc: make up)
+# Mỗi service mở 1 port cố định trên 127.0.0.1 (bảng port: README.md → "Chạy local").
+# Quy tắc depends_on: service chỉ phụ thuộc HẠ TẦNG (postgres, rabbitmq...), không phụ thuộc service khác
+# → `make ide` tắt được bất kỳ service nào để chạy nó trong IntelliJ.
 # Mật khẩu ở đây CHỈ dùng cho local; server dùng file .env riêng, không commit.
 name: ticket-local
 
@@ -35,10 +38,8 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/catalog_db
       DB_USERNAME: catalog
       DB_PASSWORD: catalog
-      # Mở cổng debug: IntelliJ → Remote JVM Debug → localhost:5005
-      JDK_JAVA_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
     ports:
-      - "127.0.0.1:5005:5005"   # chỉ debug; API đi qua gateway, không mở 8080 của service
+      - "127.0.0.1:8082:8080"   # port cố định của catalog (service chạy trong IntelliJ gọi vào đây)
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,14 +58,12 @@ services:
         SERVICE: api-gateway
     image: api-gateway:local
     environment:
-      CATALOG_SERVICE_URL: http://catalog-service:8080
-      JDK_JAVA_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+      # `make ide s=catalog-service` đặt biến này = http://host.docker.internal:8082 (catalog chạy trong IntelliJ)
+      CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # container gọi ra máy Mac
     ports:
-      - "127.0.0.1:8080:8080"   # cổng vào duy nhất
-      - "127.0.0.1:5006:5005"   # debug gateway
-    depends_on:
-      catalog-service:
-        condition: service_healthy
+      - "127.0.0.1:8080:8080"   # cổng vào của hệ thống
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
       interval: 5s

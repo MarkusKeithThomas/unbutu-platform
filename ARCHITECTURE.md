@@ -181,7 +181,8 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 - **Không bao giờ** publish port ra `0.0.0.0` – Docker bỏ qua ufw. Prod gateway `127.0.0.1:8080`; cổng chỉ-tailnet bind vào IP Tailscale `100.67.135.86`.
 - Gọi HTTP giữa service **chỉ** dùng `RestClient.Builder`/`WebClient.Builder` do Spring inject (để tracing tự propagate header). Không `new RestTemplate()`.
 - Log ra **stdout**, định dạng JSON ECS (`logging.structured.format.console=ecs`), mỗi dòng có `trace.id`, `span.id`, `requestId`, `service.name`, `service.environment`. Không log password/token/PII.
-- Mỗi service có Actuator + `healthcheck`. JVM `-XX:MaxRAMPercentage=75`, `mem_limit` ~512m.
+- Mỗi service có Actuator + `healthcheck`; `depends_on` chỉ trỏ tới hạ tầng (postgres, rabbitmq, redis), không trỏ tới service khác (service phải chịu được lúc service khác chưa sẵn sàng).
+- Mỗi service có `application-local.yml` (port cố định, `localhost`) và URL service khác đặt qua thuộc tính `services.<tên>.url` (ghi đè bằng biến `<TÊN>_SERVICE_URL`). JVM `-XX:MaxRAMPercentage=75`, `mem_limit` ~512m.
 - Database-per-service trong 1 container Postgres: mỗi service 1 database + user riêng, Flyway riêng; không đọc bảng của service khác.
 - Secret chỉ trong `.env` trên server; repo có `.env.example`.
 - Link `ts.net` công khai → bảo mật bằng JWT tại gateway, không dựa vào giấu URL.
@@ -381,7 +382,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] Message broker: RabbitMQ.
 - [x] **Mỗi service = 1 module = 1 image = 1 container**, cả trên server lẫn local.
 - [x] **1 container Postgres dùng chung, mỗi service 1 database + 1 user** chỉ có quyền trên database của mình (`identity_db`, `catalog_db`, ...). Service chỉ tạo/sửa bảng của mình qua Flyway riêng; không đọc bảng service khác (gọi API/nghe event).
-- [x] **Chạy local luôn trong container** (`docker compose up <service>`), debug bằng IntelliJ Remote JVM Debug gắn vào cổng JDWP của container.
+- [x] **Chạy local kiểu hybrid**: mặc định mọi service trong container (`make up`); service đang code chạy trong IntelliJ với profile `local` (`make ide s=<service>`), gateway trong container gọi nó qua `host.docker.internal`. Mỗi service 1 port cố định trên máy (8080 gateway, 8081 identity, 8082 catalog, 8083 inventory, 8084 booking, 8085 payment, 8086 notification). Trên server service vẫn không mở port ra ngoài.
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:

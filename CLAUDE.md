@@ -8,11 +8,13 @@
 - Truy cập server: `ssh unbutu` (qua Tailscale, có passwordless sudo). Dùng `ssh -o BatchMode=yes unbutu '...'` cho lệnh không tương tác.
 
 ## Quy tắc khi làm việc
-- Chỉ `api-gateway` được publish port, và chỉ `127.0.0.1:8080`. Docker bỏ qua ufw – không bao giờ publish ra `0.0.0.0`.
+- Trên server: chỉ `api-gateway` được publish port, và chỉ `127.0.0.1:8080`. Docker bỏ qua ufw – không bao giờ publish ra `0.0.0.0`. (Local: mỗi service mở port cố định trên `127.0.0.1` để debug hybrid.)
 - API công khai dưới `/api/<domain>/**`; service gọi nhau bằng `http://<service-name>:8080`, URL từ biến môi trường.
 - Log ra stdout dạng JSON ECS, luôn có `trace.id` + `requestId`; gọi service khác chỉ qua `RestClient.Builder`/`WebClient.Builder` được inject (để propagate trace header).
 - 3 compose project trên server: `prod` (Funnel → 127.0.0.1:8080), `staging` (chỉ tailnet :8081), `observability` (ES + Kibana :5601 + Filebeat).
 - Secret chỉ ở `/opt/unbutu-platform/.env` trên server, không commit.
+- Thêm service mới: thêm vào `deploy/compose.local.yml` (port cố định theo bảng trong README, `depends_on` chỉ hạ tầng), tạo `application-local.yml`, thêm database vào `SERVICE_DATABASES`, thêm `PORT_<service>` trong Makefile nếu chưa có.
+- Làm việc với người dùng: từng bước nhỏ, giải thích mỗi bước, hỏi trước khi cài công cụ hoặc chọn hướng thiết kế.
 - Không bật Tailscale SSH, không đổi ufw/Funnel/sleep config khi chưa hỏi người dùng.
 - Khi hạ tầng hoặc quyết định thay đổi, cập nhật `ARCHITECTURE.md` (gồm mục "Quyết định").
 - Xong một mục trong "Lộ trình senior" (§8): đánh dấu `[x]` + ngày, viết ADR `docs/adr/NNNN-<tên>.md`; sự cố/bài tập incident → `docs/postmortems/`, runbook → `docs/runbooks/`.
