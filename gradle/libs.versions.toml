@@ -12,3 +12,8 @@ spring-cloud-bom = { module = "org.springframework.cloud:spring-cloud-dependenci
 
 # Gradle plugin của Spring Boot (dùng ở bước 2, trong buildSrc)
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
+
+# Không ghi version → lấy từ BOM
+spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
