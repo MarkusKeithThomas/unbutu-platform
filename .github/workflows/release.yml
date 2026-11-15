@@ -1,0 +1,82 @@
+# Release: khi CI trên main XANH → build image ĐÚNG MỘT LẦN cho commit đó, push lên GHCR theo SHA,
+# và xuất images.env (image THEO DIGEST) làm đầu vào cho deploy prod (job deploy chờ duyệt – sẽ thêm).
+# Nguyên tắc build một lần, deploy theo digest: ARCHITECTURE.md §6.2.
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write   # push image lên ghcr.io
+
+# Mỗi SHA release đúng 1 lần, không huỷ lẫn nhau.
+concurrency:
+  group: release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Build & push images
+    # Chỉ khi CI thành công, và là push lên main (không phải PR).
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout đúng commit đã qua CI
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Cài Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cài Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # Test đã chạy ở CI cho chính SHA này → chỉ đóng jar. version = SHA → /actuator/info biết bản đang chạy.
+      - name: Build jar
+        run: ./gradlew bootJar -Pversion="${SHA::7}"
+
+      - name: Đăng nhập GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build + push image, ghi digest
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"   # GHCR yêu cầu chữ thường
+          : > images.env
+          for dir in services/*/; do
+            svc=$(basename "$dir")
+            [ -f "$dir/build.gradle.kts" ] || continue
+            image="ghcr.io/$owner/$svc"
+            echo "::group::$svc"
+            docker build -f deploy/docker/service.Dockerfile --build-arg SERVICE="$svc" -t "$image:$SHA" .
+            docker push "$image:$SHA"
+            digest_ref=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$SHA")   # ghcr.io/...@sha256:...
+            echo "::endgroup::"
+            var="$(echo "$svc" | tr 'a-z-' 'A-Z_')_IMAGE"                                  # catalog-service → CATALOG_SERVICE_IMAGE
+            echo "$var=$digest_ref" >> images.env
+          done
+          echo "APP_VERSION=${SHA::7}" >> images.env
+          {
+            echo "### Images cho \`${SHA::7}\`"
+            echo '```'
+            cat images.env
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Deploy (bước sau) tải artifact này → deploy đúng digest, không build lại.
+      - name: Lưu images.env
+        uses: actions/upload-artifact@v7
+        with:
+          name: images-${{ env.SHA }}
+          path: images.env
+          retention-days: 90

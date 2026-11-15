@@ -79,7 +79,7 @@ Dự án là **môi trường luyện kỹ năng backend/vận hành giống mô
 
 | # | Mục tiêu | Thực hiện ở | Mục |
 |---|---|---|---|
-| G1 | CI/CD thật: PR → test → build image → deploy staging tự động → prod cần duyệt | GitHub Actions + GHCR + Tailscale | §6 |
+| G1 | CI/CD thật: PR → test → merge `main` → build image → deploy prod (cần duyệt), rollback theo healthcheck | GitHub Actions + GHCR + Tailscale | §6 |
 | G2 | Đóng vai người trace bug: tìm lỗi qua log tập trung, không SSH | Elasticsearch + Kibana + Filebeat | §5 |
 | G3 | Làm việc với hệ thống **theo phân quyền** (dev không có quyền vào prod) | Linux user, Tailscale ACL, Kibana RBAC, GitHub Environments | §7 |
 | G4 | Nghiên cứu & cài các system design bắt buộc ở **API Gateway** | Spring Cloud Gateway + Redis | §4 |
@@ -93,17 +93,18 @@ Dự án là **môi trường luyện kỹ năng backend/vận hành giống mô
 ### 4.1 Sơ đồ (trên unbutu)
 ```
 Internet ─▶ Funnel :443 ─▶ 127.0.0.1:8080 (prod gateway)
-Tailnet  ─▶ unbutu:8081 (staging gateway) · unbutu:5601 (Kibana)   ← chỉ trong tailnet
+Tailnet  ─▶ unbutu:5601 (Kibana)                                   ← chỉ trong tailnet
+(Không có staging trên server – môi trường thứ 2 là local trên MacBook, ADR-0003.)
 
-┌─ project "prod" (network prod_backend) ─┐  ┌─ project "staging" (network staging_backend) ─┐
-│ api-gateway ─┬─▶ identity / catalog     │  │ (giống prod, image tag mới hơn)              │
-│   + redis    ├─▶ booking ─▶ inventory   │  │                                              │
-│              └─▶ payment                │  │                                              │
-│ rabbitmq ─▶ notification                │  │ rabbitmq                                     │
-│ postgres (DB riêng/service)             │  │ postgres                                     │
-└──────────────┬──────────────────────────┘  └──────────────┬───────────────────────────────┘
-               │ stdout JSON log (ECS)                      │
-               ▼                                            ▼
+┌─ project "prod" (network prod_backend) ─┐
+│ api-gateway ─┬─▶ identity / catalog     │
+│   + redis    ├─▶ booking ─▶ inventory   │
+│              └─▶ payment                │
+│ rabbitmq ─▶ notification                │
+│ postgres (DB riêng/service)             │
+└──────────────┬──────────────────────────┘
+               │ stdout JSON log (ECS)
+               ▼
         ┌─ project "observability" ───────────────────────────────┐
         │ filebeat (đọc log Docker) ─▶ elasticsearch ◀─ kibana     │
         └──────────────────────────────────────────────────────────┘
@@ -142,7 +143,7 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 ### 4.3 Ánh xạ Kubernetes ↔ Docker Compose
 | Kubernetes | Ở đây |
 |---|---|
-| Namespace | Compose project riêng: `prod`, `staging`, `observability` |
+| Namespace | Compose project riêng: `prod`, `observability` |
 | Deployment/Pod | 1 `service` trong compose |
 | Service DNS / ClusterIP | Tên service trên network nội bộ (`http://user-service:8080`), không khai báo `ports:` |
 | Ingress | `api-gateway` + Tailscale Funnel |
@@ -188,20 +189,14 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 - Link `ts.net` công khai → bảo mật bằng JWT tại gateway, không dựa vào giấu URL.
 
 ### 4.6 Ngân sách RAM (11 GiB)
+Chỉ 1 môi trường trên server (`prod`) – không có staging vì laptop không đủ RAM (ADR-0003).
+
 | Nhóm | Ước tính |
 |---|---|
 | prod: 7 service Spring Boot (~350 MB) + postgres + redis + rabbitmq | ~3 GB |
-| staging: như prod | ~3 GB |
 | observability: ES (heap 1g, limit 2g) + Kibana + Filebeat | ~3 GB |
 | OS + Docker + Tailscale | ~1 GB |
-| **Tổng** | **~10 GB** – sát giới hạn: **staging chỉ bật khi cần** (hoặc tắt notification/payment ở staging); cân nhắc `-XX:+UseSerialGC`, giới hạn thread pool |
-
----|---|
-| prod: gateway + 3 service + postgres + redis | ~2.5 GB |
-| staging: như prod | ~2.5 GB |
-| observability: ES (heap 1g, limit 2g) + Kibana + Filebeat | ~3 GB |
-| OS + Docker + Tailscale | ~1 GB |
-| **Tổng** | **~9 GB** – sát giới hạn; thêm service thì giảm staging hoặc tắt staging khi không dùng |
+| **Tổng** | **~7 GB** – còn ~4 GB dư cho S1/S4 (§8) và đỉnh tải; vẫn cân nhắc `-XX:+UseSerialGC`, giới hạn thread pool |
 
 ---
 
@@ -256,22 +251,25 @@ unbutu-platform/
 ├── tools/{k6,chaos}/
 └── .github/{workflows/,pull_request_template.md}
 ```
-Sẽ thêm khi làm CI/CD: `gradle/libs.versions.toml`, `build.gradle.kts` từng module, `Dockerfile` từng service, `deploy/compose.app.yml`, `deploy/compose.observability.yml`, workflow `ci.yml`/`release.yml`/`promote.yml`.
+Sẽ thêm khi làm CI/CD: `gradle/libs.versions.toml`, `build.gradle.kts` từng module, `Dockerfile` từng service, `deploy/compose.app.yml`, `deploy/compose.observability.yml`, workflow `ci.yml`/`release.yml`.
 
 ### 6.2 Pipeline
 | Sự kiện | Việc làm | Môi trường |
 |---|---|---|
 | Mở/cập nhật PR | build, unit + integration test, build thử image (`ci.yml`, image bỏ đi) | – |
-| Merge `main` | `ci.yml` chạy lại trên main + `release.yml`: build image **một lần** → push `ghcr.io/<user>/<svc>:<sha>` → deploy theo digest | **staging** tự động |
-| Tag `v*` / bấm Run | **không build lại**: gắn thêm tag (vd. `:v1.2.0`, `:prod`) cho đúng digest đã chạy ở staging → deploy digest đó | **prod**, cần duyệt |
+| Merge `main` | `ci.yml` chạy lại trên main; CI xanh → `release.yml`: build image **một lần** → push `ghcr.io/<user>/<svc>:<sha>` → job deploy (environment `production`) **chờ duyệt** → deploy theo digest | **prod** |
+| Bấm Run lại / chọn SHA cũ | deploy lại image `:<sha>` đã có trên GHCR (rollback tay), không build lại | **prod**, cần duyệt |
 
-**Nguyên tắc build một lần, promote theo digest:**
-- Image chỉ được build ở `release.yml`, một lần cho mỗi commit trên `main`, tag = git SHA đầy đủ.
-- Deploy staging/prod luôn tham chiếu **digest** (`ghcr.io/...@sha256:...`), không tham chiếu tag di động như `latest` → thứ chạy ở prod là đúng từng byte đã chạy ở staging.
-- Promote lên prod = thêm tag cho digest có sẵn (`docker buildx imagetools create --tag ... <image>@<digest>` hoặc `crane tag`), không `docker build`.
-- `ci.yml` không huỷ lần chạy trên `main` (`cancel-in-progress` chỉ bật cho PR) → mỗi SHA trên main đều có kết quả CI xanh/đỏ; release chỉ deploy SHA có CI xanh.
+Chỉ 2 môi trường (ADR-0003): **local** (MacBook, `compose.local.yml` + IntelliJ) và **prod** (`unbutu`, qua CI/CD). Không có staging – laptop không đủ RAM.
 
-Deploy: `tailscale/github-action` (OAuth client, `tag:ci`) vào tailnet → `ssh deploy@unbutu` (forced command) → script `deploy.sh <env> <sha>` chạy `docker compose -p <env> pull && up -d`, kiểm tra healthcheck, rollback về SHA cũ nếu fail.
+**Nguyên tắc build một lần, deploy theo digest:**
+- Image chỉ được build ở `release.yml`, một lần cho mỗi commit trên `main` có CI xanh, tag = git SHA đầy đủ.
+- Deploy luôn tham chiếu **digest** (`ghcr.io/...@sha256:...`, ghi trong `images.env`), không tham chiếu tag di động như `latest` → thứ chạy ở prod đúng từng byte với image đã build từ SHA đó.
+- Image đã build bị giữ trên GHCR → rollback = deploy lại digest của SHA cũ, không `docker build`.
+- `ci.yml` không huỷ lần chạy trên `main` (`cancel-in-progress` chỉ bật cho PR) → mỗi SHA trên main đều có kết quả CI xanh/đỏ; release chỉ chạy cho SHA có CI xanh.
+- Duyệt deploy: GitHub Environment `production` với required reviewers (miễn phí vì repo public); image đã push sẵn, chỉ bước deploy chờ bấm.
+
+Deploy: `tailscale/github-action` (OAuth client, `tag:ci`) vào tailnet → `ssh deploy@unbutu` (forced command) → script `deploy.sh prod <sha>` chạy `docker compose -p prod pull && up -d`, kiểm tra healthcheck, rollback về SHA cũ nếu fail.
 
 Lưu ý: GitHub Environments có **required reviewers** cho repo **public** miễn phí; repo private cần gói trả phí → nếu private, thay bằng `workflow_dispatch` thủ công.
 
@@ -283,11 +281,11 @@ Lưu ý: GitHub Environments có **required reviewers** cho repo **public** mi�
 |---|---|---|---|
 | **admin** | `chauhoaithuong` (máy MacBook) | Mọi thứ: SSH sudo, cấu hình server | – |
 | **deployer** | GitHub Actions (`tag:ci`) | SSH user `deploy`, chỉ chạy `deploy.sh` (forced command trong `authorized_keys`) | shell tự do, sudo |
-| **developer** | Tài khoản Tailscale thứ 2 / thiết bị thứ 2 (đóng vai nhân viên) | Kibana (role chỉ đọc `logs-*`), staging gateway `:8081`, SSH user `dev` chỉ vào staging (`docker logs`, `docker compose -p staging ps` qua sudoers giới hạn) | SSH prod, đọc `.env`, sửa container prod, xem log prod chứa PII nếu bị ẩn |
+| **developer** | Tài khoản Tailscale thứ 2 / thiết bị thứ 2 (đóng vai nhân viên) | Kibana (role chỉ đọc `logs-*`) – trace bug qua log, không SSH. Quyền thêm (vd. `docker compose -p prod ps` qua sudoers giới hạn) sẽ chốt khi làm §7 | SSH prod, đọc `.env`, sửa container prod, xem log prod chứa PII nếu bị ẩn |
 
 Cơ chế:
 - **Linux**: user `deploy`, `dev`, không thuộc nhóm `docker` (nhóm docker = root); quyền cụ thể qua `/etc/sudoers.d/`.
-- **Tailscale ACL**: `tag:ci` → `unbutu:22` (user deploy); `group:dev` → `unbutu:5601, 8081` (+22 user dev); admin → `*`.
+- **Tailscale ACL**: `tag:ci` → `unbutu:22` (user deploy); `group:dev` → `unbutu:5601`; admin → `*`.
 - **Kibana/ES security** (bản free có RBAC): user `elastic` (admin), role `developer` (read `logs-*`, Discover), có thể tách quyền xem `logs-prod-*`.
 - **GitHub**: branch protection `main` (bắt PR + CI xanh), environment `production` cần duyệt.
 
@@ -301,7 +299,7 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 - [ ] API Gateway P0 (routing, requestId, access log, JWT, timeout, CORS)
 - [ ] 1 service mẫu end-to-end có ECS log + `traceId`/`requestId`
 - [ ] Observability: Elasticsearch + Kibana + Filebeat, ILM 7 ngày
-- [ ] CI/CD: PR test → staging tự động → prod cần duyệt, rollback theo healthcheck
+- [ ] CI/CD: PR test → merge main → build image → prod cần duyệt, rollback theo healthcheck
 - [ ] Phân quyền: user `deploy`/`dev`, Tailscale ACL, Kibana role, branch protection
 - [x] ADR-0001: Docker Compose thay vì k3s/k8s (2026-11-15)
 
@@ -341,7 +339,7 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 - [ ] **Quy trình**: trunk-based, Conventional Commits, PR template + checklist self-review.
 
 ### Ràng buộc tài nguyên
-- Thêm S1 + S4 → tổng ~9.5–10 / 11 GiB (§4.6). Bật staging chỉ khi cần.
+- Thêm S1 + S4 → tổng ~8.5–9 / 11 GiB (§4.6). Không có staging trên server (ADR-0003).
 - **Không dùng Kafka** (~1 GB+); dùng RabbitMQ (hoặc Redpanda nếu muốn API Kafka).
 - Chưa thêm Tempo/Jaeger; `traceId` trên Kibana là đủ cho giai đoạn này.
 
@@ -354,7 +352,6 @@ sudo tailscale funnel status                 # xem Funnel
 sudo tailscale funnel --bg 8080              # bật lại Funnel → 127.0.0.1:8080
 sudo tailscale funnel --https=443 off        # tắt public
 docker compose -p prod ps | logs -f <svc>    # prod
-docker compose -p staging ps                 # staging
 sudo ufw status verbose
 ```
 Kiểm tra từ Internet công khai (bỏ qua MagicDNS trên máy có Tailscale):
@@ -369,7 +366,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - Pin hỏng + chỉ 1 máy → không HA; cúp điện/mất wifi = downtime. Nên mua UPS hoặc thay pin.
 - Băng thông phụ thuộc upload mạng nhà + giới hạn của Funnel; thêm 1 hop relay → độ trễ cao hơn VPS.
 - Funnel chỉ hỗ trợ port công khai 443/8443/10000; domain cố định `*.ts.net`, phụ thuộc Tailscale.
-- RAM sát giới hạn khi chạy cả prod + staging + ELK (§4.6).
+- RAM: prod + ELK ~7 GB / 11 GiB (§4.6); không có staging nên thay đổi đi thẳng từ local lên prod – phụ thuộc vào test (Testcontainers) + duyệt deploy + rollback.
 - Laptop 2015, 1 ổ đĩa, không RAID → cần **backup Postgres** định kỳ (pg_dump ra ngoài máy) – chưa làm.
 
 ## 11. Lộ trình nâng cấp hạ tầng
@@ -382,7 +379,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 Đã chốt:
 - [x] Docker Compose (không k3s/k8s).
 - [x] Log tập trung: Elasticsearch + Kibana + Filebeat; trace qua `traceId` + `X-Request-Id`.
-- [x] 2 môi trường staging + prod trên cùng máy; prod deploy cần duyệt.
+- [x] 2 môi trường: **local** (MacBook) + **prod** (`unbutu`, qua CI/CD); không staging vì thiếu RAM (ADR-0003). Merge `main` → build image một lần → deploy prod cần duyệt (GitHub Environment `production`).
 - [x] Bài toán: đặt vé sự kiện/phim, 7 service (§4.2) + 2 thư viện dùng chung.
 - [x] Gradle Kotlin DSL, Java 21 (ADR-0002). Package gốc `com.unbutu.ticket`.
 - [x] Message broker: RabbitMQ.

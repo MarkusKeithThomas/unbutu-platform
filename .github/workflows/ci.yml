@@ -48,7 +48,7 @@ jobs:
           retention-days: 7
 
       # Chỉ kiểm tra Dockerfile build được; image :ci bị bỏ đi.
-      # Image đem deploy do release.yml build ĐÚNG MỘT LẦN (ghcr.io/...:<sha>); staging/prod chỉ promote
+      # Image đem deploy do release.yml build ĐÚNG MỘT LẦN (ghcr.io/...:<sha>); prod deploy
       # theo digest của image đó, không build lại (ARCHITECTURE.md §6.2).
       - name: Build Docker image cho mọi service
         run: |
