@@ -19,6 +19,9 @@ spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-
 spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
 spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
 
+# Gateway (version từ Spring Cloud BOM)
+spring-cloud-starter-gateway-server-webflux = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webflux" }
+
 # Database
 spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
 spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }

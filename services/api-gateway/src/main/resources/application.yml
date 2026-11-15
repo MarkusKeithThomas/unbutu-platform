@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 2000   # ms – không kết nối được service trong 2s thì báo lỗi
+            response-timeout: 5s    # service trả lời quá 5s thì gateway trả 504
+          routes:
+            - id: catalog
+              uri: ${CATALOG_SERVICE_URL:http://catalog-service:8080}   # tên container trong Docker network
+              predicates:
+                - Path=/api/catalog/**
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

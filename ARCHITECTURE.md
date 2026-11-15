@@ -182,7 +182,7 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 - Gọi HTTP giữa service **chỉ** dùng `RestClient.Builder`/`WebClient.Builder` do Spring inject (để tracing tự propagate header). Không `new RestTemplate()`.
 - Log ra **stdout**, định dạng JSON ECS (`logging.structured.format.console=ecs`), mỗi dòng có `trace.id`, `span.id`, `requestId`, `service.name`, `service.environment`. Không log password/token/PII.
 - Mỗi service có Actuator + `healthcheck`. JVM `-XX:MaxRAMPercentage=75`, `mem_limit` ~512m.
-- Database-per-service; không đọc bảng của service khác.
+- Database-per-service trong 1 container Postgres: mỗi service 1 database + user riêng, Flyway riêng; không đọc bảng của service khác.
 - Secret chỉ trong `.env` trên server; repo có `.env.example`.
 - Link `ts.net` công khai → bảo mật bằng JWT tại gateway, không dựa vào giấu URL.
 
@@ -379,6 +379,9 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] Bài toán: đặt vé sự kiện/phim, 7 service (§4.2) + 2 thư viện dùng chung.
 - [x] Gradle Kotlin DSL, Java 21 (ADR-0002). Package gốc `com.unbutu.ticket`.
 - [x] Message broker: RabbitMQ.
+- [x] **Mỗi service = 1 module = 1 image = 1 container**, cả trên server lẫn local.
+- [x] **1 container Postgres dùng chung, mỗi service 1 database + 1 user** chỉ có quyền trên database của mình (`identity_db`, `catalog_db`, ...). Service chỉ tạo/sửa bảng của mình qua Flyway riêng; không đọc bảng service khác (gọi API/nghe event).
+- [x] **Chạy local luôn trong container** (`docker compose up <service>`), debug bằng IntelliJ Remote JVM Debug gắn vào cổng JDWP của container.
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:
