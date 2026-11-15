@@ -13,6 +13,11 @@ spring:
               uri: ${services.catalog.url}
               predicates:
                 - Path=/api/catalog/**
+            # API demo (ngoài quy ước /api/<domain>/**) – chỉ đúng 1 đường dẫn, không mở cả /api/catalog-service/**.
+            - id: catalog-demo
+              uri: ${services.catalog.url}
+              predicates:
+                - Path=/api/catalog-service/bich-phuong
 
 # Địa chỉ các service phía sau. Mặc định: tên container trong Docker network.
 # Ghi đè bằng biến môi trường (vd. CATALOG_SERVICE_URL) hoặc profile local.
