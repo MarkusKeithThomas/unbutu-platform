@@ -270,9 +270,10 @@ Chỉ 2 môi trường (ADR-0003): **local** (MacBook, `compose.local.yml` + Int
 - `ci.yml` không huỷ lần chạy trên `main` (`cancel-in-progress` chỉ bật cho PR) → mỗi SHA trên main đều có kết quả CI xanh/đỏ; release chỉ chạy cho SHA có CI xanh.
 - Duyệt deploy: GitHub Environment `production` với required reviewers (miễn phí vì repo public); image đã push sẵn, chỉ bước deploy chờ bấm.
 
-Deploy: `tailscale/github-action` (OAuth client, `tag:ci`) vào tailnet → `ssh deploy@unbutu` (forced command) → `sudo /opt/unbutu-platform/bin/deploy.sh <images.env>`:
+Deploy (`deploy.yml`, gọi từ `release.yml` hoặc chạy tay để deploy lại/rollback theo SHA): chờ **Approve** (environment `production`, chỉ nhánh `main`) → lấy artifact `images-<sha>` → `tailscale/github-action` (OIDC federated identity, `tag:ci`, không có secret) → `ssh deploy@100.67.135.86` (key trong secret `DEPLOY_SSH_KEY`; `authorized_keys`: `restrict,from="100.64.0.0/10",command="sudo -n /opt/unbutu-platform/bin/deploy.sh -"`; sudoers `/etc/sudoers.d/unbutu-deploy` chỉ cho đúng lệnh đó) → `deploy.sh` đọc `images.env` từ stdin:
 1. kiểm tra `images.env` (chỉ image `ghcr.io/markuskeiththomas/*@sha256:…`);
 2. sinh `env/<svc>.env` (root 600) từ SSM `/unbutu/prod/<svc>/env-map` + Secrets Manager – thiếu biến → dừng;
+   + tải `compose.app.yml`, `postgres/init` đúng commit `GIT_SHA` từ GitHub (deploy.sh tự nó chỉ admin cài tay – CI không sửa được code chạy root);
 3. `docker compose -p prod pull && up -d --wait` + smoke test `GET /api/catalog/ping` qua gateway;
 4. lỗi → rollback về `images.current.env` (lần thành công trước). Lịch sử: `/opt/unbutu-platform/prod/deploy-history.log`.
 
