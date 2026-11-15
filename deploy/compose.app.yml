@@ -1,0 +1,65 @@
+# Compose trên SERVER cho môi trường prod (không có staging – ADR-0003).
+#   cd /opt/unbutu-platform/prod
+#   docker compose -p prod -f compose.app.yml --env-file .env --env-file images.env up -d --wait
+#
+# .env        : bí mật + cấu hình môi trường – tạo tay trên server, root:root 600, KHÔNG commit (mẫu: .env.example)
+# images.env  : image của từng service THEO DIGEST (ghcr.io/...@sha256:...) – deploy.sh ghi khi deploy
+#
+# Khác compose.local.yml: không build, không mở port service ra máy; chỉ gateway bind 127.0.0.1:<GATEWAY_PORT>
+# (8080 → Tailscale Funnel ra Internet).
+
+x-service: &service
+  restart: unless-stopped
+  mem_limit: 512m
+  depends_on:
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+    interval: 10s
+    timeout: 3s
+    retries: 12
+    start_period: 30s
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Thiếu POSTGRES_PASSWORD trong .env}
+      SERVICE_DATABASES: catalog
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Thiếu CATALOG_DB_PASSWORD trong .env}
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  catalog-service:
+    <<: *service
+    image: ${CATALOG_SERVICE_IMAGE:?Thiếu CATALOG_SERVICE_IMAGE trong images.env}
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:?Thiếu ENVIRONMENT trong .env}
+      APP_VERSION: ${APP_VERSION:-unknown}
+      DB_URL: jdbc:postgresql://postgres:5432/catalog_db
+      DB_USERNAME: catalog
+      DB_PASSWORD: ${CATALOG_DB_PASSWORD}
+
+  api-gateway:
+    <<: *service
+    image: ${API_GATEWAY_IMAGE:?Thiếu API_GATEWAY_IMAGE trong images.env}
+    depends_on: {}
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+      APP_VERSION: ${APP_VERSION:-unknown}
+      CATALOG_SERVICE_URL: http://catalog-service:8080
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:?Thiếu GATEWAY_PORT trong .env}:8080"
+
+volumes:
+  pgdata:

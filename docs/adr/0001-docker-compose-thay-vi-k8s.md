@@ -8,6 +8,8 @@ Chạy trên 1 máy (unbutu, 11 GiB RAM). Mục tiêu là luyện CI/CD, observa
 ## Quyết định
 Docker Compose, tách môi trường bằng compose project (`prod`, `staging`, `observability`).
 
+> Cập nhật 2026-11-15: bỏ `staging` – xem ADR-0003.
+
 ## Hệ quả
 - (+) Nhẹ, đơn giản, đã có sẵn; chuyển lên VPS dễ.
 - (−) Không tự phục hồi khi máy chết, không autoscale, rolling update hạn chế.
