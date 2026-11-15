@@ -121,12 +121,24 @@ sync_deploy_files() {
     log "file deploy @ ${sha:0:7}"
 }
 
+# Mạng nhà → GHCR đôi khi đứt giữa chừng ("connection reset by peer"); pull là bước an toàn để thử lại
+# (chưa đụng container nào). Hết lượt vẫn lỗi → coi là deploy lỗi.
+pull_images() {
+    local images_env=$1 attempt
+    for attempt in 1 2 3; do
+        compose "$images_env" pull --quiet && return 0
+        log "pull lỗi (lần $attempt/3)"
+        [[ $attempt -lt 3 ]] && sleep 10
+    done
+    return 1
+}
+
 # ---------- 4. chạy ----------
 # Gọi trong `if` → set -e KHÔNG có hiệu lực bên trong; nối bằng && để bước nào lỗi là cả hàm lỗi.
 up() {
     local images_env=$1
     sync_deploy_files "$images_env" \
-        && compose "$images_env" pull --quiet \
+        && pull_images "$images_env" \
         && compose "$images_env" up -d --remove-orphans --wait --wait-timeout 300 \
         && curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -o /dev/null "$SMOKE_URL"
 }
