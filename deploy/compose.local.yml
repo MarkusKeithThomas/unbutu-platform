@@ -1,0 +1,76 @@
+# Chạy hệ thống trong container trên máy dev (mỗi service = 1 container, giống server).
+# Trước khi up: build jar →  ./gradlew build
+# Chạy:                      docker compose -f deploy/compose.local.yml up --build -d
+# Mật khẩu ở đây CHỈ dùng cho local; server dùng file .env riêng, không commit.
+name: ticket-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # Mỗi service 1 user + 1 database (xem postgres/init/01-create-service-databases.sh)
+      SERVICE_DATABASES: catalog
+      CATALOG_DB_PASSWORD: catalog
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"   # để xem DB bằng IntelliJ/DBeaver
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  catalog-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: catalog-service
+    image: catalog-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/catalog_db
+      DB_USERNAME: catalog
+      DB_PASSWORD: catalog
+      # Mở cổng debug: IntelliJ → Remote JVM Debug → localhost:5005
+      JDK_JAVA_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    ports:
+      - "127.0.0.1:5005:5005"   # chỉ debug; API đi qua gateway, không mở 8080 của service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: api-gateway
+    image: api-gateway:local
+    environment:
+      CATALOG_SERVICE_URL: http://catalog-service:8080
+      JDK_JAVA_OPTIONS: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    ports:
+      - "127.0.0.1:8080:8080"   # cổng vào duy nhất
+      - "127.0.0.1:5006:5005"   # debug gateway
+    depends_on:
+      catalog-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+volumes:
+  pgdata:
