@@ -25,7 +25,15 @@ dependencies {
         compileOnly(it)
         annotationProcessor(it)
         testImplementation(it)
+        testCompileOnly(it)
+        testAnnotationProcessor(it)
     }
+
+    // Lombok chỉ cần lúc compile (sinh code), không đóng vào jar. Quy tắc dùng: xem lombok.config.
+    compileOnly(lib("lombok"))
+    annotationProcessor(lib("lombok"))
+    testCompileOnly(lib("lombok"))
+    testAnnotationProcessor(lib("lombok"))
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
