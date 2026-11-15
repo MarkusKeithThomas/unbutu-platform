@@ -38,6 +38,14 @@ make build                   # build + toàn bộ test (như CI)
    Sửa code → Rerun trong IntelliJ (không cần build image).
 4. Xong: `make up` để đưa service về lại container.
 
+### Dữ liệu mẫu
+Chỉ có ở local và integration test (`db/seed-local/`, Flyway nạp khi profile `local` hoặc qua `compose.local.yml`); prod khởi động với bảng rỗng.
+Nếu DB local tạo trước 2026-11-15 báo lỗi checksum Flyway → `make clean && make up` một lần.
+
 ### Database
 `localhost:5432` · mỗi service 1 database + user riêng, vd. `catalog_db` / user `catalog` / mật khẩu `catalog`.
 Bảng do Flyway của từng service tạo (`src/main/resources/db/migration/V<n>__<mô tả>.sql`) khi service khởi động.
+
+## Deploy prod
+Không deploy tay: merge `main` → CI → Release → **Approve** trong tab Actions (environment `production`). Rollback: Actions → Deploy → Run workflow với SHA cũ.
+Các bước đã setup: [docs/setup-steps.md](docs/setup-steps.md) · cấu hình/secret prod: repo private `pro-ticket-workload` (ADR-0004).
