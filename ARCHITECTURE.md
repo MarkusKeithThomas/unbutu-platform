@@ -1,7 +1,8 @@
 # Kiến trúc hệ thống – unbutu platform
 
 > Tài liệu nguồn sự thật (source of truth) về hạ tầng và kiến trúc. Cập nhật file này mỗi khi hạ tầng hoặc quyết định kiến trúc thay đổi.
-> Trạng thái: **Hạ tầng đã sẵn sàng · Kiến trúc đã chốt Compose + ELK · Ứng dụng chưa build** (cập nhật 2026-11-15)
+> Trạng thái: **Prod đang chạy (api-gateway + catalog-service + postgres) · CI/CD đầy đủ, deploy cần duyệt · Cấu hình/secret trên AWS · Chưa có ELK** (cập nhật 2026-11-15)
+> Các bước đã làm theo thứ tự: [docs/setup-steps.md](docs/setup-steps.md)
 
 ---
 
@@ -21,11 +22,10 @@ Tailscale Funnel relay (IP công khai của Tailscale, chỉ chuyển tiếp TLS
   ▼
 unbutu: tailscaled giải mã TLS → proxy http://127.0.0.1:8080
   ▼
-┌──────────────── Docker network nội bộ "backend" ────────────────┐
+┌──────────────── Docker network nội bộ "prod_default" ───────────┐
 │ api-gateway (Spring Cloud Gateway) :8080  ← DUY NHẤT publish port │
-│   /api/users/**    → http://user-service:8080                     │
-│   /api/products/** → http://product-service:8080                  │
-│   /api/orders/**   → http://order-service:8080                    │
+│   /api/catalog/**  → http://catalog-service:8080   (đang chạy)    │
+│   /api/<domain>/** → http://<domain>-service:8080  (thêm dần)     │
 │ *-service  (KHÔNG publish port – chỉ gọi được từ trong mạng)      │
 │ postgres   (mỗi service 1 database riêng)                         │
 └───────────────────────────────────────────────────────────────────┘
@@ -61,7 +61,10 @@ unbutu: tailscaled giải mã TLS → proxy http://127.0.0.1:8080
 - **smartmontools** cài sẵn: `sudo smartctl -H -A /dev/sda` (SSD Transcend 512 GB, SMART PASSED lúc setup).
 - Timezone hệ thống: UTC.
 - Đã kiểm thử reboot (2026-11-15): docker, tailscaled, ssh, ufw, container, Funnel tự lên lại; Funnel cần ~1 phút sau boot.
-- Container thử nghiệm `hello` (`nginxdemos/hello:plain-text`) đang chiếm `127.0.0.1:8080` → **xóa khi deploy gateway thật**: `docker rm -f hello`.
+- Container thử `hello` đã xoá; `127.0.0.1:8080` giờ là `prod-api-gateway-1`.
+- **Deploy** (§6.2): `/opt/unbutu-platform/bin/deploy.sh` (root 755, admin cài tay), `/opt/unbutu-platform/prod/` (compose, `env/` 700, `releases/`, `images.current.env`, `deploy-history.log`).
+- User **`deploy`** (uid 111, không thuộc nhóm docker): chỉ SSH bằng key của CI có forced command; sudoers `/etc/sudoers.d/unbutu-deploy` chỉ cho `deploy.sh -`.
+- **AWS CLI v2** (`/usr/local/bin/aws`, kiểm chữ ký GPG) + `/root/.aws` (600) = IAM user `unbutu-server` chỉ đọc (ADR-0004). Thêm gói `unzip`, `jq` có sẵn.
 
 ### 2.3 Truy cập từ máy dev (MacBook, `chaus-macbook-pro`, Tailscale IP `100.84.174.47`)
 `~/.ssh/config`:
@@ -96,7 +99,7 @@ Internet ─▶ Funnel :443 ─▶ 127.0.0.1:8080 (prod gateway)
 Tailnet  ─▶ unbutu:5601 (Kibana)                                   ← chỉ trong tailnet
 (Không có staging trên server – môi trường thứ 2 là local trên MacBook, ADR-0003.)
 
-┌─ project "prod" (network prod_backend) ─┐
+┌─ project "prod" (network prod_default) ─┐
 │ api-gateway ─┬─▶ identity / catalog     │
 │   + redis    ├─▶ booking ─▶ inventory   │
 │              └─▶ payment                │
@@ -229,6 +232,7 @@ User báo lỗi + `requestId` (hiện trên màn hình lỗi FE) → Kibana Disc
 unbutu-platform/
 ├── CLAUDE.md · ARCHITECTURE.md · README.md
 ├── settings.gradle.kts · gradlew · gradle/wrapper/     # Gradle 9.9.1, Java 21
+├── gradle/libs.versions.toml · buildSrc/ (convention plugin) · lombok.config · Makefile
 ├── .editorconfig · .gitignore
 ├── libs/
 │   ├── platform-starter/       # requestId, ECS log, Problem Details, RestClient, outbox
@@ -243,16 +247,17 @@ unbutu-platform/
 │   └── notification-service/
 ├── frontend/                   # vercel.json (rewrite /api/* → ts.net); framework chưa chốt
 ├── deploy/
+│   ├── docker/service.Dockerfile  # 1 Dockerfile dùng chung (layered jar, không chạy root)
 │   ├── postgres/init/          # tạo database cho từng service
 │   ├── filebeat/
 │   ├── scripts/deploy.sh       # deploy prod trên server: env từ AWS + compose theo digest + rollback
 │   ├── compose.app.yml         # prod trên server (image theo digest, env_file từ deploy.sh)
 │   └── compose.local.yml
-├── docs/{adr,postmortems,runbooks,diagrams}/
+├── docs/{adr,postmortems,runbooks,diagrams}/ · docs/setup-steps.md
 ├── tools/{k6,chaos}/
-└── .github/{workflows/,pull_request_template.md}
+└── .github/workflows/          # ci.yml · release.yml · deploy.yml
 ```
-Sẽ thêm khi làm CI/CD: `gradle/libs.versions.toml`, `build.gradle.kts` từng module, `Dockerfile` từng service, `deploy/compose.app.yml`, `deploy/compose.observability.yml`, workflow `ci.yml`/`release.yml`.
+Đã có code: `api-gateway`, `catalog-service`. Chưa có: các service còn lại, `libs/*`, `frontend/`, `deploy/compose.observability.yml`, `pull_request_template.md`.
 
 ### 6.2 Pipeline
 | Sự kiện | Việc làm | Môi trường |
@@ -274,8 +279,11 @@ Deploy (`deploy.yml`, gọi từ `release.yml` hoặc chạy tay để deploy l�
 1. kiểm tra `images.env` (chỉ image `ghcr.io/markuskeiththomas/*@sha256:…`);
 2. sinh `env/<svc>.env` (root 600) từ SSM `/unbutu/prod/<svc>/env-map` + Secrets Manager – thiếu biến → dừng;
    + tải `compose.app.yml`, `postgres/init` đúng commit `GIT_SHA` từ GitHub (deploy.sh tự nó chỉ admin cài tay – CI không sửa được code chạy root);
-3. `docker compose -p prod pull && up -d --wait` + smoke test `GET /api/catalog/ping` qua gateway;
-4. lỗi → rollback về `images.current.env` (lần thành công trước). Lịch sử: `/opt/unbutu-platform/prod/deploy-history.log`.
+3. `docker compose -p prod pull` (thử 3 lần – mạng nhà hay đứt) `&& up -d --wait` + smoke test `GET /api/catalog/ping` qua gateway;
+4. lỗi → rollback về `images.current.env` (lần thành công trước; đã xảy ra thật với `4551749`). Lịch sử: `/opt/unbutu-platform/prod/deploy-history.log`.
+5. workflow kiểm tra từ Internet: phân giải qua DNS public (`1.1.1.1`) – trong tailnet MagicDNS trả IP 100.x và ACL chỉ cho `tag:ci` → `:22`.
+
+Rollback tay: **Actions → Deploy → Run workflow** với SHA cũ (40 ký tự, artifact còn trong 90 ngày) → Approve. Chi tiết: ADR-0005.
 
 Cấu hình/secret (ADR-0004): repo private `pro-ticket-workload` (Terraform, PR → plan, merge → apply qua GitHub OIDC) giữ bản đồ biến từng service; value nhập trên AWS Console; server đọc bằng IAM user chỉ đọc `unbutu-server`.
 
@@ -288,14 +296,14 @@ Lưu ý: GitHub Environments có **required reviewers** cho repo **public** mi�
 | Vai trò | Ai | Được làm | Không được |
 |---|---|---|---|
 | **admin** | `chauhoaithuong` (máy MacBook) | Mọi thứ: SSH sudo, cấu hình server | – |
-| **deployer** | GitHub Actions (`tag:ci`) | SSH user `deploy`, chỉ chạy `deploy.sh` (forced command trong `authorized_keys`) | shell tự do, sudo |
+| **deployer** | GitHub Actions (`tag:ci`) – **đã làm** | SSH user `deploy`, chỉ chạy `sudo -n deploy.sh -` (forced command + sudoers); Tailscale ACL chỉ `100.67.135.86:22` | shell tự do, sudo lệnh khác, đọc secret prod |
 | **developer** | Tài khoản Tailscale thứ 2 / thiết bị thứ 2 (đóng vai nhân viên) | Kibana (role chỉ đọc `logs-*`) – trace bug qua log, không SSH. Quyền thêm (vd. `docker compose -p prod ps` qua sudoers giới hạn) sẽ chốt khi làm §7 | SSH prod, đọc `.env`, sửa container prod, xem log prod chứa PII nếu bị ẩn |
 
 Cơ chế:
 - **Linux**: user `deploy`, `dev`, không thuộc nhóm `docker` (nhóm docker = root); quyền cụ thể qua `/etc/sudoers.d/`.
-- **Tailscale ACL**: `tag:ci` → `unbutu:22` (user deploy); `group:dev` → `unbutu:5601`; admin → `*`.
+- **Tailscale ACL** (grants): `autogroup:member` → `*` và `tag:ci` → `100.67.135.86:22` **đã áp dụng**, kèm `tests` trong policy; `group:dev` → `unbutu:5601` chưa làm.
 - **Kibana/ES security** (bản free có RBAC): user `elastic` (admin), role `developer` (read `logs-*`, Discover), có thể tách quyền xem `logs-prod-*`.
-- **GitHub**: branch protection `main` (bắt PR + CI xanh), environment `production` cần duyệt.
+- **GitHub**: environment `production` cần duyệt + chỉ nhánh `main` **đã làm**; branch protection `main` (bắt PR + CI xanh) **chưa bật**.
 
 ---
 
@@ -307,7 +315,7 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 - [ ] API Gateway P0 (routing, requestId, access log, JWT, timeout, CORS)
 - [ ] 1 service mẫu end-to-end có ECS log + `traceId`/`requestId`
 - [ ] Observability: Elasticsearch + Kibana + Filebeat, ILM 7 ngày
-- [ ] CI/CD: PR test → merge main → build image → prod cần duyệt, rollback theo healthcheck
+- [x] CI/CD: PR test → merge main → build image → prod cần duyệt, rollback theo healthcheck (2026-11-15, ADR-0003/0004/0005)
 - [ ] Phân quyền: user `deploy`/`dev`, Tailscale ACL, Kibana role, branch protection
 - [x] ADR-0001: Docker Compose thay vì k3s/k8s (2026-11-15)
 
@@ -331,7 +339,7 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 |---|---|---|
 | S6 | **Load test & tìm bottleneck** | k6 bắn tải vào gateway tới điểm gãy; xác định nguyên nhân (connection pool, GC, CPU) bằng JFR/async-profiler, thread dump, heap dump; so sánh virtual threads (Java 21) với thread pool |
 | S7 | **Chaos engineering** | Toxiproxy / `docker kill` / `tc netem` gây latency, chết service; chứng minh circuit breaker, timeout, retry hoạt động đúng thiết kế |
-| S8 | **Security pipeline** | Trivy scan image + Dependabot trong CI, SBOM; secret mã hoá bằng sops + age thay `.env` thô; xoay vòng key JWT; audit log cho thao tác nhạy cảm |
+| S8 | **Security pipeline** | Trivy scan image + Dependabot trong CI, SBOM; secret đã chuyển sang AWS (ADR-0004) → còn: IAM Roles Anywhere thay access key dài hạn; xoay vòng key JWT; audit log cho thao tác nhạy cảm |
 | S9 | **Testing chuyên nghiệp** | Testcontainers (Postgres thật trong CI); contract test giữa service (Spring Cloud Contract hoặc Pact) chặn thay đổi API phá vỡ |
 | S10 | **Chiến lược deploy** | Blue-green hoặc canary qua `Weight` route ở gateway; feature flag; rollback 1 lệnh |
 
@@ -360,7 +368,8 @@ sudo tailscale funnel status                 # xem Funnel
 sudo tailscale funnel --bg 8080              # bật lại Funnel → 127.0.0.1:8080
 sudo tailscale funnel --https=443 off        # tắt public
 docker compose -p prod ps | logs -f <svc>    # prod
-sudo /opt/unbutu-platform/bin/deploy.sh <images.env>   # deploy tay (CI làm việc này)
+sudo /opt/unbutu-platform/bin/deploy.sh <images.env>   # deploy tay (bình thường CI làm qua `deploy.sh -`)
+# rollback: GitHub → Actions → Deploy → Run workflow (sha cũ) → Approve
 sudo tail /opt/unbutu-platform/prod/deploy-history.log
 sudo ufw status verbose
 ```
@@ -398,12 +407,12 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] **1 container Postgres dùng chung, mỗi service 1 database + 1 user** chỉ có quyền trên database của mình (`identity_db`, `catalog_db`, ...). Service chỉ tạo/sửa bảng của mình qua Flyway riêng; không đọc bảng service khác (gọi API/nghe event).
 - [x] **Chạy local kiểu hybrid**: mặc định mọi service trong container (`make up`); service đang code chạy trong IntelliJ với profile `local` (`make ide s=<service>`), gateway trong container gọi nó qua `host.docker.internal`. Mỗi service 1 port cố định trên máy (8080 gateway, 8081 identity, 8082 catalog, 8083 inventory, 8084 booking, 8085 payment, 8086 notification). Trên server service vẫn không mở port ra ngoài.
 - [x] Cấu hình + secret prod: repo private `pro-ticket-workload` (Terraform/GitOps, OIDC) giữ đường dẫn, value chỉ trong AWS Secrets Manager; `deploy.sh` lấy lúc deploy (ADR-0004).
+- [x] Spring Boot 4.1.2, Spring Cloud 2025.1.4 (Gateway 5.0.4), PostgreSQL 17.
+- [x] CD: deploy prod sau khi duyệt, qua Tailscale OIDC (`tag:ci`) + SSH forced command (ADR-0005).
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:
 - [ ] Frontend: React + Vite (đề xuất)?
-- [ ] DB: PostgreSQL (đề xuất)?
-- [ ] Phiên bản Spring Boot / Spring Cloud.
 - [ ] Bật BIOS "Power On When AC Detected" – chờ người dùng xác nhận.
 - [ ] Chiến lược backup DB.
 - [ ] Có tắt SSH bằng mật khẩu (chỉ dùng key) không?
