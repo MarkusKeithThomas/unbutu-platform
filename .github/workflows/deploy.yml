@@ -77,5 +77,11 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
               "deploy@$SERVER" < images.env
 
-      - name: Kiểm tra từ Internet
-        run: curl -fsS --retry 5 --retry-delay 3 https://unbutu.tail3c11f4.ts.net/api/catalog/ping
+      # Runner đang trong tailnet: MagicDNS trả IP tailnet (100.x) và ACL chỉ cho tag:ci → :22.
+      # Phân giải qua DNS public → request đi qua Internet + Funnel, đúng đường người dùng thật.
+      - name: Kiểm tra từ Internet (qua Funnel)
+        run: |
+          host=unbutu.tail3c11f4.ts.net
+          ip=$(dig +short @1.1.1.1 "$host" A | tail -1)
+          [[ -n $ip ]] || { echo "::error::không phân giải được $host qua DNS public"; exit 1; }
+          curl -fsS --retry 5 --retry-delay 3 --resolve "$host:443:$ip" "https://$host/api/catalog/ping"
