@@ -1,0 +1,75 @@
+# Chạy hệ thống trong container trên máy dev (mỗi service = 1 container, giống server).
+# Trước khi up: build jar →  ./gradlew build
+# Chạy:                      docker compose -f deploy/compose.local.yml up --build -d   (hoặc: make up)
+# Mỗi service mở 1 port cố định trên 127.0.0.1 (bảng port: README.md → "Chạy local").
+# Quy tắc depends_on: service chỉ phụ thuộc HẠ TẦNG (postgres, rabbitmq...), không phụ thuộc service khác
+# → `make ide` tắt được bất kỳ service nào để chạy nó trong IntelliJ.
+# Mật khẩu ở đây CHỈ dùng cho local; server dùng file .env riêng, không commit.
+name: ticket-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # Mỗi service 1 user + 1 database (xem postgres/init/01-create-service-databases.sh)
+      SERVICE_DATABASES: catalog
+      CATALOG_DB_PASSWORD: catalog
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"   # để xem DB bằng IntelliJ/DBeaver
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  catalog-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: catalog-service
+    image: catalog-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/catalog_db
+      DB_USERNAME: catalog
+      DB_PASSWORD: catalog
+    ports:
+      - "127.0.0.1:8082:8080"   # port cố định của catalog (service chạy trong IntelliJ gọi vào đây)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: api-gateway
+    image: api-gateway:local
+    environment:
+      # `make ide s=catalog-service` đặt biến này = http://host.docker.internal:8082 (catalog chạy trong IntelliJ)
+      CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # container gọi ra máy Mac
+    ports:
+      - "127.0.0.1:8080:8080"   # cổng vào của hệ thống
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+volumes:
+  pgdata:

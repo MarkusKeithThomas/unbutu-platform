@@ -1,0 +1,8 @@
+# Profile "local": chạy gateway trong IntelliJ; service phía sau ở localhost:<port cố định>
+# (dù service đó chạy trong container hay trong IntelliJ).
+server:
+  port: 8080
+
+services:
+  catalog:
+    url: http://localhost:8082

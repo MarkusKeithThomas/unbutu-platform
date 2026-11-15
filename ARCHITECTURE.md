@@ -181,8 +181,9 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 - **Không bao giờ** publish port ra `0.0.0.0` – Docker bỏ qua ufw. Prod gateway `127.0.0.1:8080`; cổng chỉ-tailnet bind vào IP Tailscale `100.67.135.86`.
 - Gọi HTTP giữa service **chỉ** dùng `RestClient.Builder`/`WebClient.Builder` do Spring inject (để tracing tự propagate header). Không `new RestTemplate()`.
 - Log ra **stdout**, định dạng JSON ECS (`logging.structured.format.console=ecs`), mỗi dòng có `trace.id`, `span.id`, `requestId`, `service.name`, `service.environment`. Không log password/token/PII.
-- Mỗi service có Actuator + `healthcheck`. JVM `-XX:MaxRAMPercentage=75`, `mem_limit` ~512m.
-- Database-per-service; không đọc bảng của service khác.
+- Mỗi service có Actuator + `healthcheck`; `depends_on` chỉ trỏ tới hạ tầng (postgres, rabbitmq, redis), không trỏ tới service khác (service phải chịu được lúc service khác chưa sẵn sàng).
+- Mỗi service có `application-local.yml` (port cố định, `localhost`) và URL service khác đặt qua thuộc tính `services.<tên>.url` (ghi đè bằng biến `<TÊN>_SERVICE_URL`). JVM `-XX:MaxRAMPercentage=75`, `mem_limit` ~512m.
+- Database-per-service trong 1 container Postgres: mỗi service 1 database + user riêng, Flyway riêng; không đọc bảng của service khác.
 - Secret chỉ trong `.env` trên server; repo có `.env.example`.
 - Link `ts.net` công khai → bảo mật bằng JWT tại gateway, không dựa vào giấu URL.
 
@@ -260,9 +261,15 @@ Sẽ thêm khi làm CI/CD: `gradle/libs.versions.toml`, `build.gradle.kts` từn
 ### 6.2 Pipeline
 | Sự kiện | Việc làm | Môi trường |
 |---|---|---|
-| Mở/cập nhật PR | build, unit + integration test, lint | – |
-| Merge `main` | build image service thay đổi → `ghcr.io/<user>/<svc>:<sha>` → deploy | **staging** tự động |
-| Tag `v*` / bấm Run | dùng lại image đã test ở staging → deploy | **prod**, cần duyệt |
+| Mở/cập nhật PR | build, unit + integration test, build thử image (`ci.yml`, image bỏ đi) | – |
+| Merge `main` | `ci.yml` chạy lại trên main + `release.yml`: build image **một lần** → push `ghcr.io/<user>/<svc>:<sha>` → deploy theo digest | **staging** tự động |
+| Tag `v*` / bấm Run | **không build lại**: gắn thêm tag (vd. `:v1.2.0`, `:prod`) cho đúng digest đã chạy ở staging → deploy digest đó | **prod**, cần duyệt |
+
+**Nguyên tắc build một lần, promote theo digest:**
+- Image chỉ được build ở `release.yml`, một lần cho mỗi commit trên `main`, tag = git SHA đầy đủ.
+- Deploy staging/prod luôn tham chiếu **digest** (`ghcr.io/...@sha256:...`), không tham chiếu tag di động như `latest` → thứ chạy ở prod là đúng từng byte đã chạy ở staging.
+- Promote lên prod = thêm tag cho digest có sẵn (`docker buildx imagetools create --tag ... <image>@<digest>` hoặc `crane tag`), không `docker build`.
+- `ci.yml` không huỷ lần chạy trên `main` (`cancel-in-progress` chỉ bật cho PR) → mỗi SHA trên main đều có kết quả CI xanh/đỏ; release chỉ deploy SHA có CI xanh.
 
 Deploy: `tailscale/github-action` (OAuth client, `tag:ci`) vào tailnet → `ssh deploy@unbutu` (forced command) → script `deploy.sh <env> <sha>` chạy `docker compose -p <env> pull && up -d`, kiểm tra healthcheck, rollback về SHA cũ nếu fail.
 
@@ -379,12 +386,15 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] Bài toán: đặt vé sự kiện/phim, 7 service (§4.2) + 2 thư viện dùng chung.
 - [x] Gradle Kotlin DSL, Java 21 (ADR-0002). Package gốc `com.unbutu.ticket`.
 - [x] Message broker: RabbitMQ.
+- [x] **Mỗi service = 1 module = 1 image = 1 container**, cả trên server lẫn local.
+- [x] **1 container Postgres dùng chung, mỗi service 1 database + 1 user** chỉ có quyền trên database của mình (`identity_db`, `catalog_db`, ...). Service chỉ tạo/sửa bảng của mình qua Flyway riêng; không đọc bảng service khác (gọi API/nghe event).
+- [x] **Chạy local kiểu hybrid**: mặc định mọi service trong container (`make up`); service đang code chạy trong IntelliJ với profile `local` (`make ide s=<service>`), gateway trong container gọi nó qua `host.docker.internal`. Mỗi service 1 port cố định trên máy (8080 gateway, 8081 identity, 8082 catalog, 8083 inventory, 8084 booking, 8085 payment, 8086 notification). Trên server service vẫn không mở port ra ngoài.
+- [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:
 - [ ] Frontend: React + Vite (đề xuất)?
 - [ ] DB: PostgreSQL (đề xuất)?
 - [ ] Phiên bản Spring Boot / Spring Cloud.
-- [ ] GitHub repo public hay private (ảnh hưởng environment approval).
 - [ ] Bật BIOS "Power On When AC Detected" – chờ người dùng xác nhận.
 - [ ] Chiến lược backup DB.
 - [ ] Có tắt SSH bằng mật khẩu (chỉ dùng key) không?

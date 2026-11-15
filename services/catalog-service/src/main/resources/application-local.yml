@@ -1,0 +1,11 @@
+# Profile "local": chạy service trực tiếp trong IntelliJ (SPRING_PROFILES_ACTIVE=local),
+# hạ tầng + service khác chạy trong container và mở cổng ra localhost.
+# Bảng port: README.md → "Chạy local".
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/catalog_db
+    username: catalog
+    password: catalog

@@ -1,0 +1,3 @@
+# Build context chỉ gồm các jar đã build – không gửi source, .git, .gradle, secret vào Docker.
+*
+!services/*/build/libs/*.jar

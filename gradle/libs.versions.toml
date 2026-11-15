@@ -1,0 +1,34 @@
+# Version catalog: nơi DUY NHẤT khai báo phiên bản thư viện cho cả monorepo.
+# Module dùng qua accessor, vd. `implementation(libs.spring.boot.starter.webmvc)`.
+
+[versions]
+spring-boot = "4.1.2"
+spring-cloud = "2025.1.4"   # release train tương thích Spring Boot 4.0.x – 4.1.x
+
+[libraries]
+# BOM: tự quản lý version cho hàng trăm thư viện Spring/Jackson/Hibernate/Testcontainers...
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+spring-cloud-bom = { module = "org.springframework.cloud:spring-cloud-dependencies", version.ref = "spring-cloud" }
+
+# Gradle plugin của Spring Boot (dùng ở bước 2, trong buildSrc)
+spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
+
+# Không ghi version → lấy từ BOM
+lombok = { module = "org.projectlombok:lombok" }
+spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
+
+# Gateway (version từ Spring Cloud BOM)
+spring-cloud-starter-gateway-server-webflux = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webflux" }
+
+# Database
+spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
+spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
+flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
+postgresql = { module = "org.postgresql:postgresql" }
+
+# Test với Postgres thật trong Docker
+spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
