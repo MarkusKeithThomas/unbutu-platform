@@ -1,0 +1,14 @@
+# Version catalog: nơi DUY NHẤT khai báo phiên bản thư viện cho cả monorepo.
+# Module dùng qua accessor, vd. `implementation(libs.spring.boot.starter.webmvc)`.
+
+[versions]
+spring-boot = "4.1.2"
+spring-cloud = "2025.1.4"   # release train tương thích Spring Boot 4.0.x – 4.1.x
+
+[libraries]
+# BOM: tự quản lý version cho hàng trăm thư viện Spring/Jackson/Hibernate/Testcontainers...
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+spring-cloud-bom = { module = "org.springframework.cloud:spring-cloud-dependencies", version.ref = "spring-cloud" }
+
+# Gradle plugin của Spring Boot (dùng ở bước 2, trong buildSrc)
+spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }

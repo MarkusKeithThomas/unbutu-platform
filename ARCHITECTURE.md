@@ -379,12 +379,12 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] Bài toán: đặt vé sự kiện/phim, 7 service (§4.2) + 2 thư viện dùng chung.
 - [x] Gradle Kotlin DSL, Java 21 (ADR-0002). Package gốc `com.unbutu.ticket`.
 - [x] Message broker: RabbitMQ.
+- [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:
 - [ ] Frontend: React + Vite (đề xuất)?
 - [ ] DB: PostgreSQL (đề xuất)?
 - [ ] Phiên bản Spring Boot / Spring Cloud.
-- [ ] GitHub repo public hay private (ảnh hưởng environment approval).
 - [ ] Bật BIOS "Power On When AC Detected" – chờ người dùng xác nhận.
 - [ ] Chiến lược backup DB.
 - [ ] Có tắt SSH bằng mật khẩu (chỉ dùng key) không?
