@@ -150,7 +150,7 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 | replicas | `deploy.replicas` (Docker DNS round-robin) |
 | resources.limits | `deploy.resources.limits` |
 | readiness/liveness | `healthcheck` (Actuator) + `depends_on: condition: service_healthy` |
-| ConfigMap/Secret | `environment` / `.env` (chỉ trên server) |
+| ConfigMap/Secret (+ External Secrets) | `env_file: env/<svc>.env` do `deploy.sh` sinh từ AWS SSM (bản đồ) + Secrets Manager (value) – ADR-0004 |
 | PersistentVolume | named volume |
 | RBAC | Linux user + Tailscale ACL + Kibana role (§7) |
 
@@ -185,7 +185,7 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 - Mỗi service có Actuator + `healthcheck`; `depends_on` chỉ trỏ tới hạ tầng (postgres, rabbitmq, redis), không trỏ tới service khác (service phải chịu được lúc service khác chưa sẵn sàng).
 - Mỗi service có `application-local.yml` (port cố định, `localhost`) và URL service khác đặt qua thuộc tính `services.<tên>.url` (ghi đè bằng biến `<TÊN>_SERVICE_URL`). JVM `-XX:MaxRAMPercentage=75`, `mem_limit` ~512m.
 - Database-per-service trong 1 container Postgres: mỗi service 1 database + user riêng, Flyway riêng; không đọc bảng của service khác.
-- Secret chỉ trong `.env` trên server; repo có `.env.example`.
+- Cấu hình + secret prod: khai báo trong repo private `pro-ticket-workload` (`prod/services/<svc>/env.yaml`: `env` + đường dẫn `secrets`), value chỉ nằm trong AWS Secrets Manager (nhập trên Console). Không có `.env` gõ tay, không có value trong git hay Terraform state (ADR-0004).
 - Link `ts.net` công khai → bảo mật bằng JWT tại gateway, không dựa vào giấu URL.
 
 ### 4.6 Ngân sách RAM (11 GiB)
@@ -245,8 +245,9 @@ unbutu-platform/
 ├── deploy/
 │   ├── postgres/init/          # tạo database cho từng service
 │   ├── filebeat/
-│   ├── scripts/                # deploy.sh (sẽ viết)
-│   └── .env.example
+│   ├── scripts/deploy.sh       # deploy prod trên server: env từ AWS + compose theo digest + rollback
+│   ├── compose.app.yml         # prod trên server (image theo digest, env_file từ deploy.sh)
+│   └── compose.local.yml
 ├── docs/{adr,postmortems,runbooks,diagrams}/
 ├── tools/{k6,chaos}/
 └── .github/{workflows/,pull_request_template.md}
@@ -269,7 +270,13 @@ Chỉ 2 môi trường (ADR-0003): **local** (MacBook, `compose.local.yml` + Int
 - `ci.yml` không huỷ lần chạy trên `main` (`cancel-in-progress` chỉ bật cho PR) → mỗi SHA trên main đều có kết quả CI xanh/đỏ; release chỉ chạy cho SHA có CI xanh.
 - Duyệt deploy: GitHub Environment `production` với required reviewers (miễn phí vì repo public); image đã push sẵn, chỉ bước deploy chờ bấm.
 
-Deploy: `tailscale/github-action` (OAuth client, `tag:ci`) vào tailnet → `ssh deploy@unbutu` (forced command) → script `deploy.sh prod <sha>` chạy `docker compose -p prod pull && up -d`, kiểm tra healthcheck, rollback về SHA cũ nếu fail.
+Deploy: `tailscale/github-action` (OAuth client, `tag:ci`) vào tailnet → `ssh deploy@unbutu` (forced command) → `sudo /opt/unbutu-platform/bin/deploy.sh <images.env>`:
+1. kiểm tra `images.env` (chỉ image `ghcr.io/markuskeiththomas/*@sha256:…`);
+2. sinh `env/<svc>.env` (root 600) từ SSM `/unbutu/prod/<svc>/env-map` + Secrets Manager – thiếu biến → dừng;
+3. `docker compose -p prod pull && up -d --wait` + smoke test `GET /api/catalog/ping` qua gateway;
+4. lỗi → rollback về `images.current.env` (lần thành công trước). Lịch sử: `/opt/unbutu-platform/prod/deploy-history.log`.
+
+Cấu hình/secret (ADR-0004): repo private `pro-ticket-workload` (Terraform, PR → plan, merge → apply qua GitHub OIDC) giữ bản đồ biến từng service; value nhập trên AWS Console; server đọc bằng IAM user chỉ đọc `unbutu-server`.
 
 Lưu ý: GitHub Environments có **required reviewers** cho repo **public** miễn phí; repo private cần gói trả phí → nếu private, thay bằng `workflow_dispatch` thủ công.
 
@@ -352,6 +359,8 @@ sudo tailscale funnel status                 # xem Funnel
 sudo tailscale funnel --bg 8080              # bật lại Funnel → 127.0.0.1:8080
 sudo tailscale funnel --https=443 off        # tắt public
 docker compose -p prod ps | logs -f <svc>    # prod
+sudo /opt/unbutu-platform/bin/deploy.sh <images.env>   # deploy tay (CI làm việc này)
+sudo tail /opt/unbutu-platform/prod/deploy-history.log
 sudo ufw status verbose
 ```
 Kiểm tra từ Internet công khai (bỏ qua MagicDNS trên máy có Tailscale):
@@ -367,6 +376,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - Băng thông phụ thuộc upload mạng nhà + giới hạn của Funnel; thêm 1 hop relay → độ trễ cao hơn VPS.
 - Funnel chỉ hỗ trợ port công khai 443/8443/10000; domain cố định `*.ts.net`, phụ thuộc Tailscale.
 - RAM: prod + ELK ~7 GB / 11 GiB (§4.6); không có staging nên thay đổi đi thẳng từ local lên prod – phụ thuộc vào test (Testcontainers) + duyệt deploy + rollback.
+- Server dùng **access key dài hạn** (IAM user `unbutu-server`, chỉ đọc) ở `/root/.aws` – lộ root = lộ cấu hình prod. Nợ kỹ thuật: IAM Roles Anywhere (ADR-0004).
 - Laptop 2015, 1 ổ đĩa, không RAID → cần **backup Postgres** định kỳ (pg_dump ra ngoài máy) – chưa làm.
 
 ## 11. Lộ trình nâng cấp hạ tầng
@@ -386,6 +396,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] **Mỗi service = 1 module = 1 image = 1 container**, cả trên server lẫn local.
 - [x] **1 container Postgres dùng chung, mỗi service 1 database + 1 user** chỉ có quyền trên database của mình (`identity_db`, `catalog_db`, ...). Service chỉ tạo/sửa bảng của mình qua Flyway riêng; không đọc bảng service khác (gọi API/nghe event).
 - [x] **Chạy local kiểu hybrid**: mặc định mọi service trong container (`make up`); service đang code chạy trong IntelliJ với profile `local` (`make ide s=<service>`), gateway trong container gọi nó qua `host.docker.internal`. Mỗi service 1 port cố định trên máy (8080 gateway, 8081 identity, 8082 catalog, 8083 inventory, 8084 booking, 8085 payment, 8086 notification). Trên server service vẫn không mở port ra ngoài.
+- [x] Cấu hình + secret prod: repo private `pro-ticket-workload` (Terraform/GitOps, OIDC) giữ đường dẫn, value chỉ trong AWS Secrets Manager; `deploy.sh` lấy lúc deploy (ADR-0004).
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:

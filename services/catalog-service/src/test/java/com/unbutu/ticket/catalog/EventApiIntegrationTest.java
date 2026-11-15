@@ -12,7 +12,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.flyway.locations=classpath:db/migration,classpath:db/seed-local")
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class EventApiIntegrationTest {
