@@ -261,9 +261,15 @@ Sẽ thêm khi làm CI/CD: `gradle/libs.versions.toml`, `build.gradle.kts` từn
 ### 6.2 Pipeline
 | Sự kiện | Việc làm | Môi trường |
 |---|---|---|
-| Mở/cập nhật PR | build, unit + integration test, lint | – |
-| Merge `main` | build image service thay đổi → `ghcr.io/<user>/<svc>:<sha>` → deploy | **staging** tự động |
-| Tag `v*` / bấm Run | dùng lại image đã test ở staging → deploy | **prod**, cần duyệt |
+| Mở/cập nhật PR | build, unit + integration test, build thử image (`ci.yml`, image bỏ đi) | – |
+| Merge `main` | `ci.yml` chạy lại trên main + `release.yml`: build image **một lần** → push `ghcr.io/<user>/<svc>:<sha>` → deploy theo digest | **staging** tự động |
+| Tag `v*` / bấm Run | **không build lại**: gắn thêm tag (vd. `:v1.2.0`, `:prod`) cho đúng digest đã chạy ở staging → deploy digest đó | **prod**, cần duyệt |
+
+**Nguyên tắc build một lần, promote theo digest:**
+- Image chỉ được build ở `release.yml`, một lần cho mỗi commit trên `main`, tag = git SHA đầy đủ.
+- Deploy staging/prod luôn tham chiếu **digest** (`ghcr.io/...@sha256:...`), không tham chiếu tag di động như `latest` → thứ chạy ở prod là đúng từng byte đã chạy ở staging.
+- Promote lên prod = thêm tag cho digest có sẵn (`docker buildx imagetools create --tag ... <image>@<digest>` hoặc `crane tag`), không `docker build`.
+- `ci.yml` không huỷ lần chạy trên `main` (`cancel-in-progress` chỉ bật cho PR) → mỗi SHA trên main đều có kết quả CI xanh/đỏ; release chỉ deploy SHA có CI xanh.
 
 Deploy: `tailscale/github-action` (OAuth client, `tag:ci`) vào tailnet → `ssh deploy@unbutu` (forced command) → script `deploy.sh <env> <sha>` chạy `docker compose -p <env> pull && up -d`, kiểm tra healthcheck, rollback về SHA cũ nếu fail.
 
