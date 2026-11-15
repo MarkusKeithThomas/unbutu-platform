@@ -1,0 +1,81 @@
+# Deploy prod: images.env (digest) của 1 commit đã release → server unbutu, SAU KHI người duyệt bấm Approve.
+#   - Tự động: release.yml gọi sau khi build image (commit mới trên main).
+#   - Bằng tay (Actions → Deploy → Run workflow): deploy lại / ROLLBACK về SHA cũ đã release (artifact giữ 90 ngày).
+#
+# Đường đi: runner → Tailscale (OIDC, tag:ci, không có secret) → ssh deploy@unbutu
+#   → forced command `sudo -n deploy.sh -` (sudoers chỉ cho đúng lệnh này) → deploy.sh đọc images.env từ stdin.
+# Runner không có shell trên server, không chọn được lệnh, không đọc được secret prod.
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA (40 ký tự) trên main đã có Release'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read     # tải artifact images-<sha>
+  id-token: write   # OIDC → Tailscale
+
+# Mỗi lúc chỉ 1 deploy; không huỷ deploy đang chạy.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production   # required reviewer + chỉ nhánh main (Settings → Environments)
+      url: https://unbutu.tail3c11f4.ts.net
+    env:
+      SHA: ${{ inputs.sha }}
+      SERVER: 100.67.135.86
+    steps:
+      - name: Kiểm tra SHA
+        run: |
+          [[ $SHA =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha phải là 40 ký tự hex: $SHA"; exit 1; }
+
+      # Không build lại: lấy đúng images.env (digest) mà release.yml đã tạo cho SHA này.
+      - name: Lấy images.env của ${{ inputs.sha }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=images-$SHA" \
+            -q '[.artifacts[] | select(.expired | not)][0].workflow_run.id')
+          [[ -n $run_id ]] || { echo "::error::không có artifact images-$SHA (chưa release, hoặc quá 90 ngày)"; exit 1; }
+          gh run download "$run_id" -R "$GITHUB_REPOSITORY" -n "images-$SHA" -D .
+          { echo "### Deploy \`${SHA::7}\`"; echo '```'; cat images.env; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Vào tailnet (tag:ci)
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ vars.TS_OIDC_CLIENT_ID }}
+          audience: ${{ vars.TS_OIDC_AUDIENCE }}
+          tags: tag:ci
+          ping: ${{ env.SERVER }}
+
+      - name: Deploy qua SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes \
+              "deploy@$SERVER" < images.env
+
+      - name: Kiểm tra từ Internet
+        run: curl -fsS --retry 5 --retry-delay 3 https://unbutu.tail3c11f4.ts.net/api/catalog/ping

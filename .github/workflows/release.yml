@@ -1,5 +1,5 @@
 # Release: khi CI trên main XANH → build image ĐÚNG MỘT LẦN cho commit đó, push lên GHCR theo SHA,
-# và xuất images.env (image THEO DIGEST) làm đầu vào cho deploy prod (job deploy chờ duyệt – sẽ thêm).
+# xuất images.env (image THEO DIGEST), rồi gọi deploy.yml – chờ người duyệt (environment production) mới deploy.
 # Nguyên tắc build một lần, deploy theo digest: ARCHITECTURE.md §6.2.
 name: Release
 
@@ -66,6 +66,7 @@ jobs:
             echo "$var=$digest_ref" >> images.env
           done
           echo "APP_VERSION=${SHA::7}" >> images.env
+          echo "GIT_SHA=$SHA" >> images.env   # deploy.sh tải compose.app.yml đúng commit này
           {
             echo "### Images cho \`${SHA::7}\`"
             echo '```'
@@ -80,3 +81,16 @@ jobs:
           name: images-${{ env.SHA }}
           path: images.env
           retention-days: 90
+
+  # Chờ người duyệt (GitHub Environment `production`) rồi deploy đúng digest vừa build.
+  deploy:
+    name: Deploy prod
+    needs: images
+    uses: ./.github/workflows/deploy.yml
+    with:
+      sha: ${{ github.event.workflow_run.head_sha }}
+    permissions:
+      contents: read
+      actions: read     # tải artifact images-<sha>
+      id-token: write   # OIDC → Tailscale
+    secrets: inherit
