@@ -8,7 +8,9 @@
 - Truy cập server: `ssh unbutu` (qua Tailscale, có passwordless sudo). Dùng `ssh -o BatchMode=yes unbutu '...'` cho lệnh không tương tác.
 
 ## Quy tắc khi làm việc
-- **Bắt đầu mỗi việc mới**: `git checkout main && git pull --ff-only`, rồi tạo nhánh mới từ `main` (`feat/…`, `fix/…`, `docs/…`). Không làm tiếp trên nhánh của PR cũ (PR có thể đã merge/squash).
+- **Bắt đầu mỗi việc mới** (code hay tài liệu): `git checkout main && git pull --ff-only`, rồi tạo nhánh mới từ `main` (`feat/…`, `fix/…`, `docs/…`, `ci/…`) → PR → merge. Không làm tiếp trên nhánh của PR cũ (PR có thể đã merge/squash).
+- PR chỉ sửa tài liệu (`*.md`, `docs/**`) hoặc config SigNoz/local không chạy CI/Release/Deploy (`paths-ignore` trong `ci.yml`), nên cứ tạo nhánh và merge thoải mái.
+- `private-docs/`: ghi chép cá nhân, bị loại trong `.git/info/exclude` – **không commit/push**.
 - Trên server: chỉ `api-gateway` được publish port, và chỉ `127.0.0.1:8080` (ngoại lệ duy nhất: SigNoz UI `127.0.0.1:3301` → `tailscale serve :8443`, chỉ tailnet – ADR-0006). Docker bỏ qua ufw – không bao giờ publish ra `0.0.0.0`. (Local: mỗi service mở port cố định trên `127.0.0.1` để debug hybrid.)
 - API công khai dưới `/api/<domain>/**`; service gọi nhau bằng `http://<service-name>:8080`, URL từ biến môi trường.
 - Log ra stdout dạng JSON ECS, luôn có `trace.id` + `requestId`; gọi service khác chỉ qua `RestClient.Builder`/`WebClient.Builder` được inject (để propagate trace header).
@@ -26,12 +28,12 @@
 **Trạng thái**
 - Prod chạy trên `unbutu`: api-gateway + catalog-service + postgres. Public: `https://unbutu.tail3c11f4.ts.net` (`/api/catalog/ping`, `/api/catalog/events` = `[]`, demo `/api/catalog-service/bich-phuong` – có từ bản `aed92d4`, cần người dùng Approve deploy).
 - CI/CD xong (ADR-0003/4/5): merge `main` → `ci.yml` → `release.yml` (image 1 lần, `images.env` theo digest) → `deploy.yml` **chờ người dùng Approve** → Tailscale OIDC (`tag:ci`) → `ssh deploy@100.67.135.86` (forced command) → `deploy.sh -`. Rollback: Actions → Deploy → Run workflow (SHA cũ).
-- Observability **đã chốt SigNoz tự host + OpenTelemetry** (ADR-0006, thay ELK + Prometheus/Grafana) – chưa dựng. Còn mở: Micrometer + OTLP (đề xuất) hay OTel Java agent.
+- Observability **đã chốt SigNoz tự host + OpenTelemetry** (ADR-0006) – **đang chạy** từ 2026-11-16 (bản `999200b`, `/opt/unbutu-platform/observability`), UI `https://unbutu.tail3c11f4.ts.net:8443` (tailscale serve, chỉ tailnet), admin đã đăng ký. Đã thu log Docker của project `prod` (text + JSON); chưa có trace/metrics. Còn mở: Micrometer + OTLP (đề xuất) hay OTel Java agent.
 - Cấu hình/secret prod: repo private `~/pro-ticket-workload` (Terraform, AWS `038774852192`, `ap-southeast-1`). Biến service: `prod/services/<svc>/env.yaml` (`env` + `secrets: <secret>#<key>`). Value chỉ trên AWS Console.
 
 **Việc tiếp theo (gợi ý thứ tự, hỏi người dùng trước khi bắt đầu)**
 1. Branch protection `main` (bắt PR + CI xanh) – chưa bật.
-2. SigNoz (`compose.observability.yml`: ClickHouse + OTel Collector, `mem_limit`, TTL 7 ngày, UI qua `tailscale serve :8443`) – đã soạn trong PR, chờ dựng theo runbook + `libs/platform-starter`: log JSON ECS, `requestId` vào MDC, OTLP trace/metrics (ARCHITECTURE §5, ADR-0006).
+2. SigNoz: đặt retention 7 ngày (UI) nếu chưa làm. Tiếp theo `libs/platform-starter` + nối network `telemetry` vào `compose.app.yml`: log JSON ECS, `requestId` vào MDC, OTLP trace/metrics (ARCHITECTURE §5, ADR-0006).
 3. Gateway P0 còn lại: access log, JWT, CORS (§4.4). 4. Phân quyền dev: user `dev`, SigNoz role Viewer, `group:dev` (§7).
 
 **Kiểm tra nhanh trạng thái (rẻ, chạy trước khi đọc tài liệu)**

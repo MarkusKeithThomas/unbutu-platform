@@ -1,7 +1,7 @@
 # Kiến trúc hệ thống – unbutu platform
 
 > Tài liệu nguồn sự thật (source of truth) về hạ tầng và kiến trúc. Cập nhật file này mỗi khi hạ tầng hoặc quyết định kiến trúc thay đổi.
-> Trạng thái: **Prod đang chạy (api-gateway + catalog-service + postgres) · CI/CD đầy đủ, deploy cần duyệt · Cấu hình/secret trên AWS · Chưa dựng observability (đã chốt SigNoz, ADR-0006)** (cập nhật 2026-11-16)
+> Trạng thái: **Prod đang chạy (api-gateway + catalog-service + postgres) · CI/CD đầy đủ, deploy cần duyệt · Cấu hình/secret trên AWS · SigNoz đang chạy (project `observability`, UI `https://unbutu.tail3c11f4.ts.net:8443` chỉ tailnet) – đã thu log Docker của prod, chưa có trace/metrics** (cập nhật 2026-11-16)
 > Các bước đã làm theo thứ tự: [docs/setup-steps.md](docs/setup-steps.md)
 
 ---
@@ -268,6 +268,7 @@ unbutu-platform/
 |---|---|---|
 | Mở/cập nhật PR | build, unit + integration test, build thử image (`ci.yml`, image bỏ đi) | – |
 | Merge `main` | `ci.yml` chạy lại trên main; CI xanh → `release.yml`: build image **một lần** → push `ghcr.io/<user>/<svc>:<sha>` → job deploy (environment `production`) **chờ duyệt** → deploy theo digest | **prod** |
+| PR/merge **chỉ** đụng `*.md`, `docs/**`, `deploy/signoz/**`, `deploy/compose.observability.yml`, `deploy/compose.local.yml` | `paths-ignore` trong `ci.yml` → không CI, không Release, không Deploy (không tốn build). Commit có lẫn file khác thì chạy đầy đủ | – |
 | Bấm Run lại / chọn SHA cũ | deploy lại image `:<sha>` đã có trên GHCR (rollback tay), không build lại | **prod**, cần duyệt |
 
 Chỉ 2 môi trường (ADR-0003): **local** (MacBook, `compose.local.yml` + IntelliJ) và **prod** (`unbutu`, qua CI/CD). Không có staging – laptop không đủ RAM.
