@@ -26,6 +26,7 @@ Task theo từng mảng: `docs/tasks/<mảng>.md` – **chỉ đọc mục "Đan
 - Xong một mục trong "Lộ trình senior" (§8): đánh dấu `[x]` + ngày, viết ADR `docs/adr/NNNN-<tên>.md`; sự cố/bài tập incident → `docs/postmortems/`, runbook → `docs/runbooks/`.
 
 ## Bẫy đã gặp – đừng lặp lại
+- Đã báo người dùng merge PR thì **không push thêm vào nhánh đó** (#14 bị merge trước khi 2 commit sau vào kịp → mất HANDOFF). Thay đổi tiếp theo: nhánh mới từ `main`. Người dùng báo "đã merge/đã làm" → kiểm tra lại (`gh pr view`, query) trước khi làm bước sau.
 
 - Auto mode chặn Claude **merge PR** / **`terraform apply` bootstrap** khi người dùng chưa nói rõ → `terraform plan -out=b.tfplan`, người dùng chạy `! terraform -chdir=bootstrap apply b.tfplan`. Luôn apply bootstrap **trước** khi merge PR phụ thuộc nó.
 - Nhiều commit merge liên tiếp: concurrency `deploy-prod` chỉ giữ **1 deploy đang chờ duyệt** → Release cũ hiện `cancelled` là bình thường; Approve bản mới nhất.
