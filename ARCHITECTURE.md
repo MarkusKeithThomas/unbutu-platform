@@ -211,7 +211,7 @@ Chỉ 1 môi trường trên server (`prod`) – không có staging vì laptop k
 log:    service (Logback, ECS JSON → stdout) → Docker json-file → otel-collector (đọc log Docker, gắn tên container)
 trace:  service ──OTLP──▶ otel-collector                       (URL từ biến môi trường)
 metric: service ──OTLP──▶ otel-collector
-          → clickhouse (TTL 7 ngày cho log/trace/metrics) → SigNoz UI: Logs / Traces / Dashboards / Alerts
+          → clickhouse (TTL 15 ngày cho log/trace/metrics) → SigNoz UI: Logs / Traces / Dashboards / Alerts
 ```
 Log vẫn ra stdout nên `docker logs` vẫn đọc được khi SigNoz chết. Cách đo đạc (Micrometer + OTLP hay Java agent) chưa chốt (§12).
 
@@ -319,7 +319,7 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 ### Giai đoạn 0 – Nền (§4–§7)
 - [ ] API Gateway P0 (routing, requestId, access log, JWT, timeout, CORS)
 - [ ] 1 service mẫu end-to-end có ECS log + `traceId`/`requestId`
-- [ ] Observability: SigNoz (ClickHouse + OTel Collector), giữ dữ liệu 7 ngày, UI chỉ trong tailnet (ADR-0006)
+- [x] Observability: SigNoz (ClickHouse + OTel Collector), giữ dữ liệu 15 ngày, UI chỉ trong tailnet (2026-11-16, ADR-0006)
 - [x] CI/CD: PR test → merge main → build image → prod cần duyệt, rollback theo healthcheck (2026-11-15, ADR-0003/0004/0005)
 - [ ] Phân quyền: user `deploy`/`dev`, Tailscale ACL, SigNoz role, branch protection
 - [x] ADR-0001: Docker Compose thay vì k3s/k8s (2026-11-15)

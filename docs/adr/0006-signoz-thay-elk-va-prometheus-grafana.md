@@ -22,7 +22,7 @@ Server còn trống khoảng 10 GiB RAM (đo ngày 2026-11-16: prod dùng khoả
    log Docker và đẩy vào SigNoz. Không bắt app tự đẩy log qua mạng, để log vẫn đọc được bằng `docker logs` khi SigNoz chết.
 4. **Trace + metrics**: service đẩy OTLP tới collector qua Docker network (`http://<collector>:4318`), URL lấy từ biến môi trường.
    Header `traceparent` + `X-Request-Id` vẫn propagate như §5.2.
-5. **Giữ dữ liệu 7 ngày** (TTL ClickHouse, cấu hình trong SigNoz) cho log, trace và metrics. Mỗi container có `mem_limit`.
+5. **Giữ dữ liệu 15 ngày** (TTL ClickHouse, đặt trong SigNoz → Settings → Retention) cho log, trace và metrics. Ban đầu dự kiến 7 ngày; người dùng chốt 15 ngày (2026-11-16). Mỗi container có `mem_limit`.
 6. **Truy cập UI chỉ trong tailnet** (chốt 2026-11-16): Docker publish `127.0.0.1:3301` (không dùng 8080 vì trùng gateway),
    rồi `tailscale serve --bg --https=8443 http://127.0.0.1:3301` → `https://unbutu.tail3c11f4.ts.net:8443`, **không Funnel**.
    Bỏ phương án bind IP Tailscale: nếu Docker khởi động trước tailscaled thì IP 100.x chưa có và container không mở được port. Cách mới còn có HTTPS.

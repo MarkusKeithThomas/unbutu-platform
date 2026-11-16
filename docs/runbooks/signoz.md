@@ -43,7 +43,8 @@ còn cổng 8443 **không** có Funnel. Kiểm tra từ ngoài tailnet: `curl --
 ## 4. Thiết lập ban đầu (làm ngay sau bước 3)
 1. **Đăng ký tài khoản admin ngay**: người đăng ký đầu tiên thành Admin, nên đừng để máy khác trong tailnet đăng ký trước.
    Việc đăng ký tạo organization. Sau đó khoảng 30 giây collector nhận cấu hình thật (xem ghi chú ở bước 2).
-2. Settings → General → Retention: log, trace và metrics đều **7 ngày**.
+2. Settings → General → Retention: log, trace và metrics đều **15 ngày** → **bấm Save**. Kiểm tra lại bằng query trong ClickHouse:
+   `_retention_days` của `signoz_logs.logs_v2` = 15; TTL của `signoz_traces.signoz_index_v3` và `signoz_metrics.samples_v4` = `1296000` giây.
 3. (Làm sau, theo §7) Tạo user `developer` với role Viewer.
 
 ## 5. Kiểm chứng log từ prod

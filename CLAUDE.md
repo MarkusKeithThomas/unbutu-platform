@@ -1,11 +1,12 @@
 # CLAUDE.md
 
-Đọc **Handoff** (cuối file) trước. Chỉ mở **đúng mục cần** của `ARCHITECTURE.md` (~400 dòng) / `docs/setup-steps.md` / ADR khi việc đang làm đụng tới – không đọc hết để tiết kiệm token.
+Đọc **`HANDOFF.md`** trước (chỉ ghi việc cần làm ngay). Cuối mỗi phiên: **viết đè** `HANDOFF.md` – không nối thêm, không chép lại task đã xong. Chỉ mở **đúng mục cần** của `ARCHITECTURE.md` (~400 dòng) / `docs/setup-steps.md` / ADR khi việc đang làm đụng tới – không đọc hết để tiết kiệm token.
 Task theo từng mảng: `docs/tasks/<mảng>.md` – **chỉ đọc mục "Đang mở"**, mục "Đã xong" là lưu trữ, không đọc lại.
 
 ## Tóm tắt nhanh
 - Microservice Java Spring Boot, mỗi container = 1 service, Docker Compose trên 1 máy (`unbutu`, Ubuntu 24.04).
 - Public: Vercel (UI) → `https://unbutu.tail3c11f4.ts.net` (Tailscale Funnel) → `127.0.0.1:8080` (api-gateway).
+- Trạng thái + API đang có: `README.md`. Task theo mảng: `docs/tasks/`. Repo cấu hình prod `~/pro-ticket-workload`: AWS `038774852192`, `ap-southeast-1`.
 - Truy cập server: `ssh unbutu` (qua Tailscale, có passwordless sudo). Dùng `ssh -o BatchMode=yes unbutu '...'` cho lệnh không tương tác.
 
 ## Quy tắc khi làm việc
@@ -24,26 +25,9 @@ Task theo từng mảng: `docs/tasks/<mảng>.md` – **chỉ đọc mục "Đan
 - Khi hạ tầng hoặc quyết định thay đổi, cập nhật `ARCHITECTURE.md` (gồm mục "Quyết định").
 - Xong một mục trong "Lộ trình senior" (§8): đánh dấu `[x]` + ngày, viết ADR `docs/adr/NNNN-<tên>.md`; sự cố/bài tập incident → `docs/postmortems/`, runbook → `docs/runbooks/`.
 
-## Handoff (cập nhật cuối mỗi phiên – lần cuối: 2026-11-16)
+## Bẫy đã gặp – đừng lặp lại
+- Đã báo người dùng merge PR thì **không push thêm vào nhánh đó** (#14 bị merge trước khi 2 commit sau vào kịp → mất HANDOFF). Thay đổi tiếp theo: nhánh mới từ `main`. Người dùng báo "đã merge/đã làm" → kiểm tra lại (`gh pr view`, query) trước khi làm bước sau.
 
-**Trạng thái**
-- Prod chạy trên `unbutu`: api-gateway + catalog-service + postgres. Public: `https://unbutu.tail3c11f4.ts.net` (`/api/catalog/ping`, `/api/catalog/events` = `[]`, demo `/api/catalog-service/bich-phuong` – có từ bản `aed92d4`, cần người dùng Approve deploy).
-- CI/CD xong (ADR-0003/4/5): merge `main` → `ci.yml` → `release.yml` (image 1 lần, `images.env` theo digest) → `deploy.yml` **chờ người dùng Approve** → Tailscale OIDC (`tag:ci`) → `ssh deploy@100.67.135.86` (forced command) → `deploy.sh -`. Rollback: Actions → Deploy → Run workflow (SHA cũ).
-- Observability **đã chốt SigNoz tự host + OpenTelemetry** (ADR-0006) – **đang chạy** từ 2026-11-16 (bản `999200b`, `/opt/unbutu-platform/observability`), UI `https://unbutu.tail3c11f4.ts.net:8443` (tailscale serve, chỉ tailnet), admin đã đăng ký. Đã thu log Docker của project `prod` (text + JSON); chưa có trace/metrics. Còn mở: Micrometer + OTLP (đề xuất) hay OTel Java agent.
-- Cấu hình/secret prod: repo private `~/pro-ticket-workload` (Terraform, AWS `038774852192`, `ap-southeast-1`). Biến service: `prod/services/<svc>/env.yaml` (`env` + `secrets: <secret>#<key>`). Value chỉ trên AWS Console.
-
-**Việc tiếp theo (gợi ý thứ tự, hỏi người dùng trước khi bắt đầu)**
-1. Branch protection `main` (bắt PR + CI xanh) – chưa bật.
-2. Observability: xem `docs/tasks/observability.md` (OBS-1 retention → OBS-2 metrics server/container → OBS-3 access log → OBS-4 platform-starter + OTel, cần chốt Micrometer hay agent).
-3. Gateway P0 còn lại: access log, JWT, CORS (§4.4). 4. Phân quyền dev: user `dev`, SigNoz role Viewer, `group:dev` (§7).
-
-**Kiểm tra nhanh trạng thái (rẻ, chạy trước khi đọc tài liệu)**
-```bash
-gh pr list; gh run list -L 5
-ssh -o BatchMode=yes unbutu 'sudo tail -3 /opt/unbutu-platform/prod/deploy-history.log; docker compose -p prod ps --format "{{.Service}} {{.Status}}"'
-```
-
-**Bẫy đã gặp – đừng lặp lại**
 - Auto mode chặn Claude **merge PR** / **`terraform apply` bootstrap** khi người dùng chưa nói rõ → `terraform plan -out=b.tfplan`, người dùng chạy `! terraform -chdir=bootstrap apply b.tfplan`. Luôn apply bootstrap **trước** khi merge PR phụ thuộc nó.
 - Nhiều commit merge liên tiếp: concurrency `deploy-prod` chỉ giữ **1 deploy đang chờ duyệt** → Release cũ hiện `cancelled` là bình thường; Approve bản mới nhất.
 - Không tự bấm Approve deploy (cổng duyệt của người dùng). Không chờ log dài bằng `gh run watch` – người dùng sẽ báo; kiểm tra bằng `gh run view --log-failed`.
