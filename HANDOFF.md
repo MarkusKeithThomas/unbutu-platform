@@ -4,12 +4,13 @@
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-16.
 
 ## Làm ngay
-1. **OBS-2 – dựng metrics server + container.** Code ở **PR #15**. Khi #15 đã vào `main`: chạy `docs/runbooks/signoz.md` bước 1–2,
-   rồi kiểm tra theo "Xong khi" của OBS-2 trong `docs/tasks/observability.md`. Đối chiếu `filesystem /` với `df -h /`;
-   `docker_stats` lỗi → `docker logs signoz-ingester`.
+1. **OBS-3 – access log ở gateway** (`docs/tasks/observability.md`). Không phụ thuộc gì; nhánh mới từ `main`.
+2. **OBS-7 – đo lại CPU của ClickHouse** (sau OBS-2 là ~23% khi rảnh). Xem trên SigNoz: `container.cpu.*`,
+   `compose.service = signoz-telemetrystore-clickhouse-0-0`. Nếu vẫn > 5% → giảm system log trong `deploy/signoz/clickhouse/config.yaml`.
 
 ## Đang chờ người dùng
-- Merge PR #15 (OBS-2) và PR docs `docs/retention-15d`.
+- Merge PR docs `docs/obs-2-done`.
+- **OBS-4:** chốt cách đo đạc: Micrometer + OTLP (đề xuất) hay OpenTelemetry Java agent.
 
 ## Kiểm tra nhanh đầu phiên
 ```bash
