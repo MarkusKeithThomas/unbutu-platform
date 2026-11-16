@@ -10,26 +10,12 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ## Đang mở
 
-### OBS-3 + OBS-4 · Access log + OpenTelemetry Java agent · DOING (đã đạt, còn PR sửa 2 lỗi) · Claude
-- Đã deploy `0181019` (#21). Kiểm chứng 2026-11-16, request `X-Request-Id: obs4-check-3` qua Funnel:
-  - **Trace waterfall** 7 span: gateway Server → Client → catalog Server → Repository → Hibernate → JDBC `catalog_db`. ✔
-  - **Log** của gateway + catalog có cùng `trace_id` và `requestId`, level đúng. ✔
-  - **Metrics:** `http.server.request.duration` (2 service), `http.client.request.duration`, `jvm.*`, `db.client.connections.*`. ✔
-  - **Không còn span `/actuator`** kể từ khi collector mới chạy (0 / 27 span). ✔
-- **2 lỗi, sửa trong PR `fix/obs-flatten-attrs-dedupe-requestid`:**
-  1. Field lồng nhau (`http`, `url`, `log`…) bị lưu thành **chuỗi JSON** → thêm `transform/flatten-logs` (OTTL `flatten`).
-  2. Response có **2 header `X-Request-Id`** (gateway + catalog) → gateway đặt header lúc `beforeCommit` để ghi đè.
-- **Xong khi** (sau merge PR sửa + dựng lại observability + Approve deploy):
-  - `attributes_string` có `url.path`, `http.request.method`, `log.logger`; `attributes_number` có `http.response.status_code`.
-  - Response chỉ có 1 header `x-request-id`.
-  - RAM của gateway/catalog < 512m.
-
-### OBS-5 · S1: dashboard RED + SLO + alert · BLOCKED (cần OBS-2, OBS-4) · Claude + người dùng
+### OBS-5 · S1: dashboard RED + SLO + alert · TODO (OBS-2, OBS-4 đã xong) · Claude + người dùng
 - Dashboard RED (rate, errors, duration) cho từng service + JVM. SLO: 99% request < 300 ms.
 - Alert: error rate > 5% hoặc service down → Telegram. **Kiểm chứng:** kênh webhook của SigNoz gửi thẳng Telegram Bot API được
   không, hay cần cầu nối. Token bot để trên AWS (ADR-0004), không đưa vào git.
 - Dashboard/alert lưu dạng JSON trong repo (`deploy/signoz/dashboards/`) để review được.
-  Đã có `host-metrics.json` + `container-metrics.json` (đã import, có data). Còn thiếu: RED theo service (cần OBS-4), SLO, alert.
+  Đã có `host-metrics.json` + `container-metrics.json` (đã import, có data). Còn thiếu: RED theo service (có sẵn `http.server.request.duration` của từng service), SLO, alert.
 - **Xong khi:** gây lỗi thử (vd. tắt catalog) → nhận được tin Telegram; đánh dấu `[x]` S1 ở ARCHITECTURE §8 + ADR.
 
 ### OBS-6 · Quyền xem cho `developer` · BLOCKED (làm cùng phân quyền §7) · người dùng + Claude
@@ -54,6 +40,7 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 - SigNoz ghim `v0.148.1`. v0.149 ghi log 2 lần, nên đọc release notes trước khi nâng.
 
 ## Đã xong
+- 2026-11-16 · OBS-3 + OBS-4: OTel Java agent (chỉ prod) + access log gateway/catalog + `requestId` MDC; trace waterfall 7 span gateway→catalog→JDBC, log 2 service cùng `trace_id`/`requestId`, metrics `http.server.request.duration`/`jvm.*`/`db.client.connections.*`, không còn span `/actuator`, attribute log phẳng (`url.path`, `http.response.status_code` kiểu số), 1 header `X-Request-Id`; RAM gateway 302 MB, catalog 355 MB (+~80–100 MB do agent, < 512m) · PR #21, #22
 - 2026-11-16 · Dashboard host + container dạng code (`deploy/signoz/dashboards/`), sửa `host.name` mặc định = `unbutu` · PR #18, #19
 - 2026-11-16 · OBS-2 metrics host (17 metric `system.*`) + container (13 metric `container.*`, 8 container, nhãn `compose.service`) qua socket proxy chỉ-đọc; `filesystem /` và RAM khớp `df`/`free`; collector 51 MB, proxy 19 MB · PR #15
 - 2026-11-16 · OBS-1 retention **15 ngày** cho log/trace/metrics (người dùng chọn 15 thay vì 7), đã kiểm tra trong ClickHouse; tick mục Observability ở §8

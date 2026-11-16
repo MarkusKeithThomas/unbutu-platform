@@ -3,14 +3,14 @@
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-16.
 
-## Làm ngay (khi PR `fix/obs-flatten-attrs-dedupe-requestid` đã vào `main`)
-1. Dựng lại observability: `docs/runbooks/signoz.md` bước 1 → `up -d --force-recreate --wait`. Lý do: đổi `ingester.yaml` + ClickHouse config.
-   **Ngay sau đó** kiểm tra collector không lỗi (`docker logs signoz-ingester`, OTTL `flatten` mới thêm). Nếu lỗi: dựng lại bằng config của `0181019`.
-2. Nhắc người dùng **Approve** deploy prod (gateway sửa header trùng).
-3. Kiểm chứng "Xong khi" của **OBS-3 + OBS-4** (attribute phẳng, 1 header) và **OBS-7** (đo CPU sau ≥ 30 phút).
+## Làm ngay
+1. **OBS-7 – đo CPU ClickHouse** từ **16:56 UTC 2026-11-16** trở đi (stack tạo lại lúc ~16:26, bản `18cf1f1`):
+   `ssh unbutu 'for i in 1 2 3; do docker stats --no-stream --format "{{.CPUPerc}}" signoz-telemetrystore-clickhouse-0-0; done'`
+   + đếm part mới của `system` / 30 phút trong `system.part_log`. Đạt (< 5%) hoặc ghi mức đo + lý do → đóng OBS-7.
+2. Sau đó gợi ý người dùng chọn việc tiếp theo: **OBS-5** (dashboard RED + SLO + alert Telegram) hoặc Gateway P0 còn lại (JWT, CORS).
 
 ## Đang chờ người dùng
-- Merge PR sửa ở trên. Merge xong thì chờ Claude dựng lại observability rồi mới Approve deploy.
+- Merge PR docs `docs/obs-3-4-done`.
 
 ## Kiểm tra nhanh đầu phiên
 ```bash
