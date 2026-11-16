@@ -80,6 +80,8 @@ Nếu không thấy log: `sudo docker logs signoz-ingester 2>&1 | tail -50` (l�
 Gốc: `SigNoz/dashboards` (bản `v1`, định dạng query builder v5), đã chỉnh cho dữ liệu của server này. Import (admin, trên UI):
 Dashboards → **New dashboard → Import JSON** → chọn file → **Import**. Sửa trên UI xong thì Export JSON → ghi đè file trong repo → PR,
 để dashboard luôn được review như code.
+**Bẫy:** dashboard mẫu của SigNoz có thể lưu sẵn giá trị biến (vd. `host.name = testingapp-server`), khiến panel trống mà không báo lỗi.
+Trước khi commit, kiểm tra `variables.*.selectedValue/defaultValue` = `unbutu`. Chẩn đoán panel trống: đọc query thật trong `system.query_log` của ClickHouse.
 
 ## Nâng version
 Đổi `x-versions` trong compose (SigNoz cùng collector theo release notes) → PR → merge → lặp lại bước 1, rồi

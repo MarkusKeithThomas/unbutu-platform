@@ -81,11 +81,12 @@
       "name": "host.name",
       "order": 0,
       "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'host.name')\nFROM signoz_metrics.distributed_time_series_v4_1day\nWHERE metric_name LIKE 'container_%' AND unix_milli >= now() - INTERVAL 1 DAY;",
-      "selectedValue": "testingapp-server",
+      "selectedValue": "unbutu",
       "showALLOption": false,
       "sort": "DISABLED",
       "textboxValue": "",
-      "type": "QUERY"
+      "type": "QUERY",
+      "defaultValue": "unbutu"
     }
   },
   "version": "v5",
