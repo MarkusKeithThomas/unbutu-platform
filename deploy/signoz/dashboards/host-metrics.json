@@ -310,7 +310,7 @@
     "251c0d09-804b-46fa-b3bf-6498251a53b1": {
       "allSelected": false,
       "customValue": "",
-      "defaultValue": "",
+      "defaultValue": "unbutu",
       "description": "The name of the host machine",
       "dynamicVariablesAttribute": "host.name",
       "dynamicVariablesSource": "All telemetry",
@@ -323,7 +323,8 @@
       "showALLOption": true,
       "sort": "DISABLED",
       "textboxValue": "",
-      "type": "DYNAMIC"
+      "type": "DYNAMIC",
+      "selectedValue": "unbutu"
     }
   },
   "version": "v5",
