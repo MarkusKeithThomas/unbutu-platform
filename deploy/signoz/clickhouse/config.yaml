@@ -2,8 +2,12 @@
 # Khác bản gốc: tên file config-0-0.yaml → config.yaml (user_directories.users_xml.path).
 # OBS-7 (2026-11-16): ClickHouse ăn ~32% CPU khi rảnh, chủ yếu do tự giám sát (system: 1041 part mới/30 phút so với 298 của
 # SigNoz; trace_log 1.35M dòng từ query profiler; zookeeper_log 730k dòng). Đã tắt: query profiler (trace_log),
-# zookeeper_log, processors_profile_log; asynchronous metrics 1s → 60s. GIỮ query_log + part_log (dùng để chẩn đoán).
+# zookeeper_log, processors_profile_log, global profiler, session_log, query_views_log; asynchronous metrics 1s → 60s. GIỮ query_log + part_log (dùng để chẩn đoán).
 asynchronous_metrics_update_period_s: 60
+# OBS-7 (đo sau lần 1): trace_log vẫn ~35k dòng/2 phút do profiler TOÀN CỤC (mặc định lấy mẫu mọi thread mỗi 10s),
+# không phải profiler theo query → tắt. Bỏ thêm session_log, query_views_log (nhiều part nhỏ, không dùng).
+global_profiler_real_time_period_ns: 0
+global_profiler_cpu_time_period_ns: 0
 asynchronous_metric_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
 dictionaries_config: '*_dictionary.xml'
@@ -53,8 +57,6 @@ query_metric_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
 query_thread_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
-query_views_log:
-  ttl: event_date + INTERVAL 1 DAY DELETE
 quotas:
   default:
     interval:
@@ -70,8 +72,6 @@ remote_servers:
     - replica:
       - host: signoz-telemetrystore-clickhouse-0-0
         port: 9000
-session_log:
-  ttl: event_date + INTERVAL 1 DAY DELETE
 tcp_port: 9000
 text_log:
   flush_interval_milliseconds: 30000

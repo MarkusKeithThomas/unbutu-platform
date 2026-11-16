@@ -34,7 +34,12 @@ class RequestIdWebFilter implements WebFilter {
         ServerWebExchange mutated = exchange.mutate()
                 .request(r -> r.headers(h -> h.set(HEADER, requestId)))
                 .build();
-        mutated.getResponse().getHeaders().set(HEADER, requestId);
+        // Đặt lúc commit (không phải ngay bây giờ): service phía sau cũng trả X-Request-Id và gateway chép header
+        // của nó sang → set() lúc commit ghi đè, response chỉ còn đúng 1 giá trị.
+        mutated.getResponse().beforeCommit(() -> {
+            mutated.getResponse().getHeaders().set(HEADER, requestId);
+            return Mono.empty();
+        });
         return chain.filter(mutated);
     }
 }

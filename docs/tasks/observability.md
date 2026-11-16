@@ -10,27 +10,19 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ## Đang mở
 
-### OBS-3 + OBS-4 · Access log + OpenTelemetry Java agent · DOING (code xong trong PR, chờ merge → deploy → kiểm chứng) · Claude
-- Đã chốt (người dùng, 2026-11-16): **OpenTelemetry Java agent** `v2.33.1`, chỉ bật ở prod (ADR-0006 §"Đo đạc service").
-- Đã code:
-  - Gateway `AccessLogWebFilter` (bỏ `/actuator`, IP thật lấy từ `X-Forwarded-For` khi đi qua Funnel).
-  - `libs/platform-starter`: `RequestIdFilter` → MDC, `AccessLogFilter`, `RestClient` truyền `X-Request-Id`; catalog dùng starter.
-  - Dockerfile `ADD --checksum` agent. `compose.app.yml`: `JDK_JAVA_OPTIONS`, `OTEL_*`, `LOGGING_STRUCTURED_*`, network `telemetry` (external).
-  - Collector: đọc log ECS lồng nhau + `trace_id`/`span_id`, bỏ span `/actuator`.
-- Đã kiểm ở máy: gateway + agent → access log JSON có `trace_id` trùng span SERVER, `requestId`, `client.address`. Test đều qua.
-- **Chưa kiểm được trước merge:** cách SigNoz lưu attribute lồng nhau (`http.*`, `url.*`, `log.logger`) – lệnh chạy collector
-  tạm ghi vào ClickHouse bị auto mode chặn. Sau deploy: kiểm tra key trong `attributes_string`/`attributes_number`.
-  Nếu bị lưu thành chuỗi JSON thì thêm bước làm phẳng trong `ingester.yaml`.
-- **Sau merge, theo thứ tự:**
-  1. Dựng lại observability: runbook bước 1, rồi `up -d --force-recreate --wait` cả stack (vì đổi config ClickHouse + collector).
-  2. Approve deploy prod (image mới có agent).
-  3. `curl -H 'X-Request-Id: obs4-check' https://unbutu.tail3c11f4.ts.net/api/catalog/events`.
-- **Xong khi:**
-  - SigNoz Traces có waterfall `api-gateway` → `catalog-service` (+ span JDBC).
-  - Logs của cả 2 service lọc được theo cùng `trace_id` và `requestId = obs4-check`.
-  - Metrics JVM/HTTP (`jvm.*`, `http.server.request.duration`) có `service.name`.
-  - Không có trace `/actuator`.
-  - RAM của gateway/catalog vẫn < 512m (xem dashboard container).
+### OBS-3 + OBS-4 · Access log + OpenTelemetry Java agent · DOING (đã đạt, còn PR sửa 2 lỗi) · Claude
+- Đã deploy `0181019` (#21). Kiểm chứng 2026-11-16, request `X-Request-Id: obs4-check-3` qua Funnel:
+  - **Trace waterfall** 7 span: gateway Server → Client → catalog Server → Repository → Hibernate → JDBC `catalog_db`. ✔
+  - **Log** của gateway + catalog có cùng `trace_id` và `requestId`, level đúng. ✔
+  - **Metrics:** `http.server.request.duration` (2 service), `http.client.request.duration`, `jvm.*`, `db.client.connections.*`. ✔
+  - **Không còn span `/actuator`** kể từ khi collector mới chạy (0 / 27 span). ✔
+- **2 lỗi, sửa trong PR `fix/obs-flatten-attrs-dedupe-requestid`:**
+  1. Field lồng nhau (`http`, `url`, `log`…) bị lưu thành **chuỗi JSON** → thêm `transform/flatten-logs` (OTTL `flatten`).
+  2. Response có **2 header `X-Request-Id`** (gateway + catalog) → gateway đặt header lúc `beforeCommit` để ghi đè.
+- **Xong khi** (sau merge PR sửa + dựng lại observability + Approve deploy):
+  - `attributes_string` có `url.path`, `http.request.method`, `log.logger`; `attributes_number` có `http.response.status_code`.
+  - Response chỉ có 1 header `x-request-id`.
+  - RAM của gateway/catalog < 512m.
 
 ### OBS-5 · S1: dashboard RED + SLO + alert · BLOCKED (cần OBS-2, OBS-4) · Claude + người dùng
 - Dashboard RED (rate, errors, duration) cho từng service + JVM. SLO: 99% request < 300 ms.
@@ -45,14 +37,13 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 - Tailscale ACL: `group:dev` → `unbutu:8443` (hiện `autogroup:member → *`).
 - **Xong khi:** tài khoản dev xem được Logs/Traces nhưng không sửa được alert/cấu hình; ssh `unbutu` bị chặn.
 
-### OBS-7 · ClickHouse ăn CPU khi rảnh · DOING (cùng PR với OBS-3/4) · Claude
-- Đo 2026-11-16: ~32% CPU, 600 MB. Query + merge chỉ khoảng 50 giây CPU / 30 phút (khoảng 3% một nhân).
-  Phần còn lại là ClickHouse tự giám sát: `system` tạo 1041 part mới / 30 phút (SigNoz: 298); `trace_log` 1.35 triệu dòng
-  (query profiler); `zookeeper_log` 730 nghìn dòng.
-- Đã sửa `deploy/signoz/clickhouse/config.yaml`: tắt query profiler, `zookeeper_log`, `processors_profile_log`;
-  `asynchronous_metrics_update_period_s` 60. **Giữ** `query_log` + `part_log` (dùng để chẩn đoán).
-- **Xong khi:** sau khi tạo lại stack, CPU của ClickHouse lúc rảnh < 5%, hoặc ghi lại mức đo được và lý do chấp nhận.
-  Xem trên dashboard container `observability/signoz-telemetrystore-clickhouse-0-0`.
+### OBS-7 · ClickHouse ăn CPU khi rảnh · DOING (lần 2) · Claude
+- Trước: ~32% CPU. **Lần 1 (#21):** tắt query profiler, `zookeeper_log`, `processors_profile_log`; async metrics 60 giây.
+  Đã xác nhận ClickHouse nhận đủ các setting, và 2 bảng log đó không còn ghi. Nhưng `trace_log` vẫn khoảng 35 nghìn dòng / 2 phút.
+- **Lần 2 (PR sửa):** nguyên nhân là **profiler toàn cục** (`global_profiler_*`, mặc định lấy mẫu mọi thread mỗi 10 giây) → tắt.
+  Bỏ thêm `session_log`, `query_views_log`.
+- **Xong khi:** sau khi tạo lại stack và **chờ ≥ 30 phút** (lúc mới khởi động còn merge nền), CPU lúc rảnh < 5%, hoặc ghi lại mức đo được.
+  Lưu ý: giờ có thêm trace/metrics thật từ 2 service nên tải nền cao hơn trước.
 
 ## Nợ kỹ thuật đã biết (chấp nhận, không phải task)
 - Collector không có extension `file_storage` → `start_at: end`. Log sinh ra lúc collector tắt không vào SigNoz (vẫn có trong `docker logs`).

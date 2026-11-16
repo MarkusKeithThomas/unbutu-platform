@@ -19,10 +19,24 @@ class RequestIdWebFilterTest {
                 MockServerHttpRequest.get("/api/catalog/events").header("X-Request-Id", "client-req-42"));
         var forwarded = new AtomicReference<ServerWebExchange>();
 
-        filter.filter(exchange, ex -> { forwarded.set(ex); return Mono.empty(); }).block();
+        filter.filter(exchange, ex -> { forwarded.set(ex); return ex.getResponse().setComplete(); }).block();
 
         assertThat(forwarded.get().getRequest().getHeaders().getFirst("X-Request-Id")).isEqualTo("client-req-42");
         assertThat(exchange.getResponse().getHeaders().getFirst("X-Request-Id")).isEqualTo("client-req-42");
+    }
+
+    @Test
+    void responseHasSingleRequestIdEvenWhenDownstreamAlsoReturnsOne() {
+        var exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/catalog/events").header("X-Request-Id", "client-req-42"));
+
+        // Giả lập gateway chép header của catalog (cũng có X-Request-Id) sang response.
+        filter.filter(exchange, ex -> {
+            ex.getResponse().getHeaders().add("X-Request-Id", "client-req-42");
+            return ex.getResponse().setComplete();
+        }).block();
+
+        assertThat(exchange.getResponse().getHeaders().get("X-Request-Id")).containsExactly("client-req-42");
     }
 
     @Test
@@ -31,7 +45,7 @@ class RequestIdWebFilterTest {
                 MockServerHttpRequest.get("/api/catalog/events").header("X-Request-Id", "bad id\nforged-log-line"));
         var forwarded = new AtomicReference<ServerWebExchange>();
 
-        filter.filter(exchange, ex -> { forwarded.set(ex); return Mono.empty(); }).block();
+        filter.filter(exchange, ex -> { forwarded.set(ex); return ex.getResponse().setComplete(); }).block();
 
         String generated = exchange.getResponse().getHeaders().getFirst("X-Request-Id");
         assertThat(generated).matches("[0-9a-f-]{36}");
