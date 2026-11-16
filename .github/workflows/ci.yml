@@ -1,10 +1,23 @@
 # CI: mỗi PR và mỗi push lên main → build, chạy toàn bộ test, build Docker image (không push).
 name: CI
 
+# Thay đổi KHÔNG ảnh hưởng image/deploy prod → bỏ qua CI. Release (workflow_run của CI trên main) và Deploy
+# cũng không chạy → merge tài liệu không tốn build. Commit có lẫn file khác vẫn chạy đầy đủ.
+#   - *.md, docs/: tài liệu
+#   - deploy/signoz/, compose.observability.yml: SigNoz do admin dựng tay (docs/runbooks/signoz.md), deploy.sh không dùng
+#   - compose.local.yml: chỉ dùng ở máy dev
+# Lưu ý khi bật branch protection: nếu bắt buộc check "Build & test", PR chỉ có docs sẽ kẹt "pending" → cần xử lý (vd. job rỗng).
 on:
   pull_request:
+    paths-ignore: &paths-ignore
+      - '**/*.md'
+      - 'docs/**'
+      - 'deploy/signoz/**'
+      - 'deploy/compose.observability.yml'
+      - 'deploy/compose.local.yml'
   push:
     branches: [main]
+    paths-ignore: *paths-ignore
 
 # Token của workflow chỉ được đọc code – nguyên tắc quyền tối thiểu.
 permissions:

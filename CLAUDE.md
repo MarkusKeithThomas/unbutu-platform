@@ -8,8 +8,8 @@
 - Truy cập server: `ssh unbutu` (qua Tailscale, có passwordless sudo). Dùng `ssh -o BatchMode=yes unbutu '...'` cho lệnh không tương tác.
 
 ## Quy tắc khi làm việc
-- **Bắt đầu mỗi việc mới**: `git checkout main && git pull --ff-only`, rồi tạo nhánh mới từ `main` (`feat/…`, `fix/…`). Không làm tiếp trên nhánh của PR cũ (PR có thể đã merge/squash).
-- **Thay đổi không phải code** (`*.md`, ADR, runbook, `docs/`): commit vào nhánh dài hạn **`docs/wip`**, không mở PR riêng. Mỗi lần thêm: `git fetch && git rebase origin/main`. Lý do: mỗi lần merge vào `main` đều chạy CI → Release → Deploy (tốn build). Khi có PR code: `git rebase docs/wip` hoặc cherry-pick các commit docs vào nhánh code, để **1 lần merge = 1 lần build**. Sau khi merge xong, reset `docs/wip` về `main`.
+- **Bắt đầu mỗi việc mới** (code hay tài liệu): `git checkout main && git pull --ff-only`, rồi tạo nhánh mới từ `main` (`feat/…`, `fix/…`, `docs/…`, `ci/…`) → PR → merge. Không làm tiếp trên nhánh của PR cũ (PR có thể đã merge/squash).
+- PR chỉ sửa tài liệu (`*.md`, `docs/**`) hoặc config SigNoz/local không chạy CI/Release/Deploy (`paths-ignore` trong `ci.yml`), nên cứ tạo nhánh và merge thoải mái.
 - `private-docs/`: ghi chép cá nhân, bị loại trong `.git/info/exclude` – **không commit/push**.
 - Trên server: chỉ `api-gateway` được publish port, và chỉ `127.0.0.1:8080` (ngoại lệ duy nhất: SigNoz UI `127.0.0.1:3301` → `tailscale serve :8443`, chỉ tailnet – ADR-0006). Docker bỏ qua ufw – không bao giờ publish ra `0.0.0.0`. (Local: mỗi service mở port cố định trên `127.0.0.1` để debug hybrid.)
 - API công khai dưới `/api/<domain>/**`; service gọi nhau bằng `http://<service-name>:8080`, URL từ biến môi trường.
