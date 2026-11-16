@@ -20,17 +20,18 @@
 - Khi hạ tầng hoặc quyết định thay đổi, cập nhật `ARCHITECTURE.md` (gồm mục "Quyết định").
 - Xong một mục trong "Lộ trình senior" (§8): đánh dấu `[x]` + ngày, viết ADR `docs/adr/NNNN-<tên>.md`; sự cố/bài tập incident → `docs/postmortems/`, runbook → `docs/runbooks/`.
 
-## Handoff (cập nhật cuối mỗi phiên – lần cuối: 2026-11-15)
+## Handoff (cập nhật cuối mỗi phiên – lần cuối: 2026-11-16)
 
 **Trạng thái**
 - Prod chạy trên `unbutu`: api-gateway + catalog-service + postgres. Public: `https://unbutu.tail3c11f4.ts.net` (`/api/catalog/ping`, `/api/catalog/events` = `[]`, demo `/api/catalog-service/bich-phuong` – có từ bản `aed92d4`, cần người dùng Approve deploy).
 - CI/CD xong (ADR-0003/4/5): merge `main` → `ci.yml` → `release.yml` (image 1 lần, `images.env` theo digest) → `deploy.yml` **chờ người dùng Approve** → Tailscale OIDC (`tag:ci`) → `ssh deploy@100.67.135.86` (forced command) → `deploy.sh -`. Rollback: Actions → Deploy → Run workflow (SHA cũ).
+- Observability **đã chốt SigNoz tự host + OpenTelemetry** (ADR-0006, thay ELK + Prometheus/Grafana) – chưa dựng. Còn mở: Micrometer + OTLP (đề xuất) hay OTel Java agent.
 - Cấu hình/secret prod: repo private `~/pro-ticket-workload` (Terraform, AWS `038774852192`, `ap-southeast-1`). Biến service: `prod/services/<svc>/env.yaml` (`env` + `secrets: <secret>#<key>`). Value chỉ trên AWS Console.
 
 **Việc tiếp theo (gợi ý thứ tự, hỏi người dùng trước khi bắt đầu)**
 1. Branch protection `main` (bắt PR + CI xanh) – chưa bật.
-2. ELK (`compose.observability.yml`) + `libs/platform-starter`: log JSON ECS, `requestId` vào MDC, tracing (ARCHITECTURE §5).
-3. Gateway P0 còn lại: access log, JWT, CORS (§4.4). 4. Phân quyền dev: user `dev`, Kibana role, `group:dev` (§7).
+2. SigNoz (`compose.observability.yml`: ClickHouse + OTel Collector, `mem_limit`, TTL 7 ngày, UI bind IP Tailscale) + `libs/platform-starter`: log JSON ECS, `requestId` vào MDC, OTLP trace/metrics (ARCHITECTURE §5, ADR-0006).
+3. Gateway P0 còn lại: access log, JWT, CORS (§4.4). 4. Phân quyền dev: user `dev`, SigNoz role Viewer, `group:dev` (§7).
 
 **Kiểm tra nhanh trạng thái (rẻ, chạy trước khi đọc tài liệu)**
 ```bash
