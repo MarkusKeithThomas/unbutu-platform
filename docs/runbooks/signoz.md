@@ -71,6 +71,16 @@ ssh unbutu 'sudo docker run --rm --label com.docker.compose.project=prod --label
 Nếu không thấy log: `sudo docker logs signoz-ingester 2>&1 | tail -50` (lỗi operator `filelog/docker`), và kiểm tra log Docker có `attrs`:
 `sudo tail -1 /var/lib/docker/containers/$(docker inspect -f '{{.Id}}' prod-catalog-service-1)/*-json.log`.
 
+## Dashboards (lưu trong repo: `deploy/signoz/dashboards/`)
+| File | Nội dung |
+|---|---|
+| `host-metrics.json` | CPU, RAM, load, disk IO, filesystem của `unbutu` (không có network – xem nợ kỹ thuật trong `docs/tasks/observability.md`) |
+| `container-metrics.json` | CPU%, RAM%, RAM/limit, network, block IO từng container, nhóm theo `compose.project/compose.service` |
+
+Gốc: `SigNoz/dashboards` (bản `v1`, định dạng query builder v5), đã chỉnh cho dữ liệu của server này. Import (admin, trên UI):
+Dashboards → **New dashboard → Import JSON** → chọn file → **Import**. Sửa trên UI xong thì Export JSON → ghi đè file trong repo → PR,
+để dashboard luôn được review như code.
+
 ## Nâng version
 Đổi `x-versions` trong compose (SigNoz cùng collector theo release notes) → PR → merge → lặp lại bước 1, rồi
 `sudo docker compose -f compose.observability.yml up -d --force-recreate --wait`. Phải tạo lại cả stack, không restart lẻ từng service.
