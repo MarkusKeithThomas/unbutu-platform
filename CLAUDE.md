@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Đọc `ARCHITECTURE.md` trước khi làm bất cứ việc gì – nó mô tả hạ tầng server `unbutu`, kiến trúc microservice và các quyết định còn mở.
+Đọc **Handoff** (cuối file) trước. Chỉ mở **đúng mục cần** của `ARCHITECTURE.md` (~400 dòng) / `docs/setup-steps.md` / ADR khi việc đang làm đụng tới – không đọc hết để tiết kiệm token.
 
 ## Tóm tắt nhanh
 - Microservice Java Spring Boot, mỗi container = 1 service, Docker Compose trên 1 máy (`unbutu`, Ubuntu 24.04).
@@ -19,3 +19,33 @@
 - Không bật Tailscale SSH, không đổi ufw/Funnel/sleep config khi chưa hỏi người dùng.
 - Khi hạ tầng hoặc quyết định thay đổi, cập nhật `ARCHITECTURE.md` (gồm mục "Quyết định").
 - Xong một mục trong "Lộ trình senior" (§8): đánh dấu `[x]` + ngày, viết ADR `docs/adr/NNNN-<tên>.md`; sự cố/bài tập incident → `docs/postmortems/`, runbook → `docs/runbooks/`.
+
+## Handoff (cập nhật cuối mỗi phiên – lần cuối: 2026-11-15)
+
+**Trạng thái**
+- Prod chạy trên `unbutu`: api-gateway + catalog-service + postgres. Public: `https://unbutu.tail3c11f4.ts.net` (`/api/catalog/ping`, `/api/catalog/events` = `[]`, demo `/api/catalog-service/bich-phuong` – có từ bản `aed92d4`, cần người dùng Approve deploy).
+- CI/CD xong (ADR-0003/4/5): merge `main` → `ci.yml` → `release.yml` (image 1 lần, `images.env` theo digest) → `deploy.yml` **chờ người dùng Approve** → Tailscale OIDC (`tag:ci`) → `ssh deploy@100.67.135.86` (forced command) → `deploy.sh -`. Rollback: Actions → Deploy → Run workflow (SHA cũ).
+- Cấu hình/secret prod: repo private `~/pro-ticket-workload` (Terraform, AWS `038774852192`, `ap-southeast-1`). Biến service: `prod/services/<svc>/env.yaml` (`env` + `secrets: <secret>#<key>`). Value chỉ trên AWS Console.
+
+**Việc tiếp theo (gợi ý thứ tự, hỏi người dùng trước khi bắt đầu)**
+1. Branch protection `main` (bắt PR + CI xanh) – chưa bật.
+2. ELK (`compose.observability.yml`) + `libs/platform-starter`: log JSON ECS, `requestId` vào MDC, tracing (ARCHITECTURE §5).
+3. Gateway P0 còn lại: access log, JWT, CORS (§4.4). 4. Phân quyền dev: user `dev`, Kibana role, `group:dev` (§7).
+
+**Kiểm tra nhanh trạng thái (rẻ, chạy trước khi đọc tài liệu)**
+```bash
+gh pr list; gh run list -L 5
+ssh -o BatchMode=yes unbutu 'sudo tail -3 /opt/unbutu-platform/prod/deploy-history.log; docker compose -p prod ps --format "{{.Service}} {{.Status}}"'
+```
+
+**Bẫy đã gặp – đừng lặp lại**
+- Auto mode chặn Claude **merge PR** / **`terraform apply` bootstrap** khi người dùng chưa nói rõ → `terraform plan -out=b.tfplan`, người dùng chạy `! terraform -chdir=bootstrap apply b.tfplan`. Luôn apply bootstrap **trước** khi merge PR phụ thuộc nó.
+- Nhiều commit merge liên tiếp: concurrency `deploy-prod` chỉ giữ **1 deploy đang chờ duyệt** → Release cũ hiện `cancelled` là bình thường; Approve bản mới nhất.
+- Không tự bấm Approve deploy (cổng duyệt của người dùng). Không chờ log dài bằng `gh run watch` – người dùng sẽ báo; kiểm tra bằng `gh run view --log-failed`.
+- Lệnh tương tác (`aws configure`, `ssh-copy-id`) không chạy được qua `!` → bảo người dùng mở Terminal riêng.
+- zsh: biến không tự tách từ (dùng mảng `R=(...)`, `"${R[@]}"`), `$s:l` là modifier, `echo ====` lỗi.
+- Docker Desktop trên Mac hay tắt → Testcontainers fail cục bộ; để CI chạy integration test.
+- Repo GitHub mới dùng **OIDC immutable subject**: `repo:<owner>@<id>/<repo>@<id>:…` (xem `gh api repos/<r>/actions/oidc/customization/sub`).
+- Trong tailnet MagicDNS trả IP 100.x → kiểm tra public: `dig +short @1.1.1.1 <host>` + `curl --resolve`.
+- `deploy.sh` **không** được CI cập nhật: sửa → PR **và** cài tay `sudo install -m 755 … /opt/unbutu-platform/bin/deploy.sh`.
+- Không in value secret ra màn hình/log; key/secret đi thẳng qua pipe (AWS → ssh, ssh-keygen → `gh secret set`).
