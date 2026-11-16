@@ -10,21 +10,6 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ## Đang mở
 
-### OBS-2 · Metrics của server + container · DOING (PR #15, chờ merge → dựng) · Claude
-- Đã chốt (người dùng, 2026-11-16): **docker-socket-proxy chỉ-đọc** (`tecnativa/docker-socket-proxy:v0.5.0`), collector không mount `docker.sock`.
-- Đã code (PR #15):
-  - `hostmetrics` (cpu, load, memory, paging, disk, filesystem `/`) qua `/proc` + `/sys` mount `:ro`, không mount cả `/`.
-  - `docker_stats` qua proxy, `api_version` 1.44.
-  - Collector `cap_drop: ALL`; gắn `host.name=unbutu`.
-- Không có metrics network của host (scraper `network` sẽ đọc network namespace của collector). Muốn có thì cần cách khác, để sau.
-- **Rủi ro còn lại:** inspect container trả cả Env (mật khẩu DB của prod). Chặn bằng rule haproxy riêng nếu cần.
-- **Còn lại:** merge #15 → runbook bước 1–2 → kiểm tra.
-- **Xong khi:**
-  - ClickHouse `signoz_metrics` có metric `system.cpu.*`, `system.memory.*`, `container.*` với `host.name=unbutu` và `compose.service`.
-  - `system.filesystem.usage` của `/` khớp `df -h /`.
-  - SigNoz Dashboards dựng được biểu đồ CPU/RAM host + từng container.
-  - Collector < 512m, proxy < 64m.
-
 ### OBS-3 · Gateway access log · TODO · Claude
 - Hạng mục P0 trong ARCHITECTURE §4.4. Global filter ghi 1 dòng/request: method, path, status, latency, client IP, `requestId`, traceId.
 - Dùng chung với OBS-4 nếu làm sau (lúc đó log theo định dạng ECS).
@@ -60,17 +45,22 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ### OBS-7 · ClickHouse ăn CPU khi rảnh · TODO · Claude
 - Đo 2026-11-16: ClickHouse ~15% CPU, ~490 MB RAM khi gần như không có dữ liệu (stack mới chạy 18 phút).
+  Sau OBS-2 (thêm metrics host + container mỗi 30 giây): ~23% CPU, ~550 MB RAM.
+  Giờ có thể xem trên SigNoz: `container.cpu.*` với `compose.service = signoz-telemetrystore-clickhouse-0-0`.
 - Đo lại sau vài giờ: `ssh unbutu 'docker stats --no-stream | grep clickhouse'`. Nếu vẫn > 5%: giảm system log
   (`metric_log`, `trace_log`, `asynchronous_metric_log`, `query_log`…) trong `deploy/signoz/clickhouse/config.yaml`.
 - **Xong khi:** CPU lúc rảnh < 5%, hoặc ghi lại lý do chấp nhận.
 
 ## Nợ kỹ thuật đã biết (chấp nhận, không phải task)
 - Collector không có extension `file_storage` → `start_at: end`. Log sinh ra lúc collector tắt không vào SigNoz (vẫn có trong `docker logs`).
-- Collector chạy root (file log Docker là `root 0640`), mount read-only.
+- Collector chạy uid 0 (file log Docker là `root 0640`) nhưng `cap_drop: ALL` (`CapEff` = 0, không đọc được `/proc/1/environ`), mount read-only.
+- Không có metrics network của host: scraper `network` sẽ đọc network namespace của collector. Network từng container thì có (`container.network.*`).
+- Socket proxy cho `GET /containers/<id>/json`, nên collector đọc được **Env của container prod** (mật khẩu DB). Đã kiểm tra proxy chặn: `/images`, `/info`, mọi POST → 403. Chặn hẳn inspect cần rule haproxy riêng.
 - Collector không có lệnh `validate`; lỗi cấu hình chỉ lộ ra trong `docker logs signoz-ingester`.
 - SigNoz ghim `v0.148.1`. v0.149 ghi log 2 lần, nên đọc release notes trước khi nâng.
 
 ## Đã xong
+- 2026-11-16 · OBS-2 metrics host (17 metric `system.*`) + container (13 metric `container.*`, 8 container, nhãn `compose.service`) qua socket proxy chỉ-đọc; `filesystem /` và RAM khớp `df`/`free`; collector 51 MB, proxy 19 MB · PR #15
 - 2026-11-16 · OBS-1 retention **15 ngày** cho log/trace/metrics (người dùng chọn 15 thay vì 7), đã kiểm tra trong ClickHouse; tick mục Observability ở §8
 - 2026-11-16 · Chốt SigNoz thay ELK + Prometheus/Grafana (ADR-0006) · PR #10
 - 2026-11-16 · Compose `observability` + config collector/ClickHouse + runbook + label log prod · PR #11

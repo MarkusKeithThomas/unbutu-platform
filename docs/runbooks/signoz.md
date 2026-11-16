@@ -23,7 +23,14 @@ Kết quả: `/opt/unbutu-platform/observability/{compose.observability.yml,sign
 ssh unbutu 'cd /opt/unbutu-platform/observability && sudo docker compose -f compose.observability.yml up -d --wait'
 ssh unbutu 'sudo docker compose -p observability ps -a --format "{{.Service}} {{.Status}}"'
 ```
-Kỳ vọng: `user-scripts` và `migrator` ở trạng thái **Exited (0)**. Keeper, ClickHouse và `signoz-signoz-0` **healthy**. `ingester` **Up**.
+Kỳ vọng: `user-scripts` và `migrator` ở trạng thái **Exited (0)**. Keeper, ClickHouse, `signoz-signoz-0` **healthy**. `ingester`, `signoz-docker-socket-proxy` **Up**.
+
+Kiểm tra proxy chỉ cho đọc (không dùng tên container thật khi thử POST):
+```bash
+ssh unbutu 'for t in "GET /containers/json" "GET /images/json" "POST /containers/khong-ton-tai/stop"; do m=${t%% *}; u=${t#* }; \
+  echo "$t -> $(sudo docker run --rm --network signoz-docker-api curlimages/curl:8.11.1 -s -o /dev/null -w %{http_code} -X $m http://signoz-docker-socket-proxy:2375$u)"; done'
+# kỳ vọng: 200, 403, 403
+```
 
 > **Lần dựng đầu tiên, collector chưa thu gì cho tới khi có tài khoản admin (bước 4).** Collector nhận cấu hình từ SigNoz qua OpAMP.
 > Khi chưa có organization, SigNoz log `failed to find or create agent` (`orgs: 0`) và đẩy xuống pipeline `nop`.
