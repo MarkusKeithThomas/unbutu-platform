@@ -1,0 +1,221 @@
+# OTel Collector (signoz-otel-collector v0.144.15) – ADR-0006.
+# Gốc: SigNoz Foundry v0.4.0 (docs/examples/docker/compose/pours/deployment/ingester/ingester.yaml).
+# Khác bản gốc:
+#   1. Thêm receiver filelog/docker: đọc log Docker (json-file) của container thuộc project `prod`.
+#   2. Thêm processor memory_limiter (đứng đầu mọi pipeline) và giảm kích thước batch cho máy 11 GiB.
+#   3. Pipeline logs nhận cả otlp lẫn filelog/docker.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Log của service: stdout → Docker json-file (/var/lib/docker/containers/<id>/<id>-json.log).
+  # Mỗi dòng: {"log":"...\n","stream":"stdout","time":"...","attrs":{"com.docker.compose.service":"...", ...}}
+  # `attrs` có nhờ logging.options.labels trong deploy/compose.app.yml.
+  # Không có extension file_storage → không nhớ vị trí đọc; start_at: end để không đọc lại log cũ khi khởi động lại
+  # (đổi lại: mất log trong lúc collector tắt – vẫn còn trong `docker logs`).
+  filelog/docker:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    start_at: end
+    include_file_name: false
+    include_file_path: false
+    operators:
+      # 1) Bóc lớp JSON của Docker.
+      - type: json_parser
+        id: docker
+        timestamp:
+          parse_from: attributes.time
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+      # 2) Chỉ giữ log của compose project `prod` (bỏ log của chính SigNoz/ClickHouse).
+      - type: filter
+        expr: 'attributes.attrs == nil or attributes.attrs["com.docker.compose.project"] != "prod"'
+      - type: move
+        from: attributes.attrs["com.docker.compose.service"]
+        to: resource["service.name"]
+      - type: move
+        from: attributes.attrs["com.docker.compose.project"]
+        to: resource["deployment.environment"]
+      - type: move
+        from: attributes.stream
+        to: attributes["log.iostream"]
+      - type: move
+        from: attributes.log
+        to: body
+      - type: remove
+        field: attributes.attrs
+      - type: remove
+        if: 'attributes.time != nil'
+        field: attributes.time
+
+      # 3a) Log JSON (ECS, quy ước §5 – khi libs/platform-starter bật). Hỗ trợ cả key phẳng ("log.level")
+      #     lẫn lồng nhau ({"log":{"level":..}}); trace lấy từ "trace.id" (ECS) hoặc "traceId" (MDC của Micrometer).
+      #     TODO khi làm platform-starter: chốt 1 định dạng rồi xoá nhánh thừa.
+      - type: json_parser
+        id: app_json
+        if: 'body matches "^\\s*\\{"'
+        parse_from: body
+        parse_to: attributes
+        on_error: send_quiet
+      - type: severity_parser
+        id: sev_flat
+        if: 'attributes["log.level"] != nil'
+        parse_from: attributes["log.level"]
+        on_error: send_quiet
+      - type: severity_parser
+        id: sev_nested
+        if: 'attributes.log != nil && attributes.log.level != nil'
+        parse_from: attributes.log.level
+        on_error: send_quiet
+      - type: trace_parser
+        id: trace_ecs
+        if: 'attributes["trace.id"] != nil'
+        trace_id:
+          parse_from: attributes["trace.id"]
+        span_id:
+          parse_from: attributes["span.id"]
+        on_error: send_quiet
+      - type: trace_parser
+        id: trace_mdc
+        if: 'attributes.traceId != nil'
+        trace_id:
+          parse_from: attributes.traceId
+        span_id:
+          parse_from: attributes.spanId
+        on_error: send_quiet
+      - type: move
+        if: 'attributes.message != nil'
+        from: attributes.message
+        to: body
+        on_error: send_quiet
+
+      # 3b) Log text mặc định của Spring Boot (hiện tại trên prod):
+      #     "2026-11-15T14:50:38.446Z  INFO 1 --- [catalog-service] [...] logger : message"
+      - type: regex_parser
+        id: spring_text
+        if: 'body matches "^\\S+\\s+(TRACE|DEBUG|INFO|WARN|ERROR)\\s"'
+        regex: '^\S+\s+(?P<level>TRACE|DEBUG|INFO|WARN|ERROR)\s'
+        parse_from: body
+        parse_to: attributes
+        severity:
+          parse_from: attributes.level
+        on_error: send_quiet
+
+connectors:
+  signozmeter:
+    dimensions:
+      - name: service.name
+      - name: deployment.environment
+      - name: host.name
+    metrics_flush_interval: 1h
+
+exporters:
+  clickhouselogsexporter:
+    dsn: tcp://signoz-telemetrystore-clickhouse-0-0:9000/signoz_logs
+    sending_queue:
+      enabled: false
+    timeout: 45s
+    use_new_schema: true
+  clickhousetraces:
+    datasource: tcp://signoz-telemetrystore-clickhouse-0-0:9000/signoz_traces
+    low_cardinal_exception_grouping: ${env:LOW_CARDINAL_EXCEPTION_GROUPING}
+    sending_queue:
+      enabled: false
+    timeout: 45s
+    use_new_schema: true
+  metadataexporter:
+    cache:
+      provider: in_memory
+    dsn: tcp://signoz-telemetrystore-clickhouse-0-0:9000/signoz_metadata
+    enabled: true
+    timeout: 45s
+  signozclickhousemeter:
+    dsn: tcp://signoz-telemetrystore-clickhouse-0-0:9000/signoz_meter
+    sending_queue:
+      enabled: false
+    timeout: 45s
+  signozclickhousemetrics:
+    dsn: tcp://signoz-telemetrystore-clickhouse-0-0:9000/signoz_metrics
+    sending_queue:
+      enabled: false
+    timeout: 45s
+
+extensions:
+  signoz_health_check:
+    endpoint: 0.0.0.0:13133
+
+processors:
+  # mem_limit container = 512m → giới hạn mềm 400 MiB, từ chối dữ liệu mới thay vì bị OOM kill.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+  batch:
+    send_batch_max_size: 11000
+    send_batch_size: 10000
+    timeout: 5s
+  batch/meter:
+    send_batch_max_size: 25000
+    send_batch_size: 20000
+    timeout: 5s
+  signozllmpricing:
+    attrs:
+      cache_read: gen_ai.usage.cache_read.input_tokens
+      cache_write: gen_ai.usage.cache_creation.input_tokens
+      in: gen_ai.usage.input_tokens
+      model: gen_ai.request.model
+      out: gen_ai.usage.output_tokens
+    default_pricing:
+      rules: []
+    output_attrs:
+      cache_read: signoz.gen_ai.usage.cache_read.input_tokens.cost
+      cache_write: signoz.gen_ai.usage.cache_write.input_tokens.cost
+      in: signoz.gen_ai.usage.input_tokens.cost
+      out: signoz.gen_ai.usage.output_tokens.cost
+      total: signoz.gen_ai.usage.tokens.cost
+  signozspanmapper:
+    groups: []
+  signozspanmetrics/delta:
+    aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
+    dimensions:
+      - default: default
+        name: service.namespace
+      - default: default
+        name: deployment.environment
+      - name: signoz.collector.id
+      - name: service.version
+    dimensions_cache_size: 100000
+    enable_exp_histogram: true
+    latency_histogram_buckets:
+      [100us, 1ms, 2ms, 6ms, 10ms, 50ms, 100ms, 250ms, 500ms, 1000ms, 1400ms, 2000ms, 5s, 10s, 20s, 40s, 60s]
+    metrics_exporter: signozclickhousemetrics
+    metrics_flush_interval: 60s
+
+service:
+  extensions:
+    - signoz_health_check
+  pipelines:
+    logs:
+      receivers: [otlp, filelog/docker]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouselogsexporter, signozmeter, metadataexporter]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [signozclickhousemetrics, signozmeter, metadataexporter]
+    metrics/meter:
+      receivers: [signozmeter]
+      processors: [batch/meter]
+      exporters: [signozclickhousemeter]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, signozspanmetrics/delta, signozspanmapper, signozllmpricing, batch]
+      exporters: [clickhousetraces, signozmeter, metadataexporter]
+  telemetry:
+    logs:
+      encoding: json

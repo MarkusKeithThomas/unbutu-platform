@@ -96,7 +96,7 @@ Dự án là **môi trường luyện kỹ năng backend/vận hành giống mô
 ### 4.1 Sơ đồ (trên unbutu)
 ```
 Internet ─▶ Funnel :443 ─▶ 127.0.0.1:8080 (prod gateway)
-Tailnet  ─▶ unbutu:<port> (SigNoz UI, bind IP Tailscale)           ← chỉ trong tailnet
+Tailnet  ─▶ tailscale serve :8443 ─▶ 127.0.0.1:3301 (SigNoz UI)     ← chỉ trong tailnet, không Funnel
 (Không có staging trên server – môi trường thứ 2 là local trên MacBook, ADR-0003.)
 
 ┌─ project "prod" (network prod_default) ─┐
@@ -252,7 +252,8 @@ unbutu-platform/
 ├── deploy/
 │   ├── docker/service.Dockerfile  # 1 Dockerfile dùng chung (layered jar, không chạy root)
 │   ├── postgres/init/          # tạo database cho từng service
-│   ├── signoz/                 # cấu hình SigNoz + otel-collector (ADR-0006)
+│   ├── signoz/                 # config ClickHouse/Keeper/otel-collector cho SigNoz (ADR-0006)
+│   ├── compose.observability.yml # SigNoz trên server – admin chạy tay (docs/runbooks/signoz.md)
 │   ├── scripts/deploy.sh       # deploy prod trên server: env từ AWS + compose theo digest + rollback
 │   ├── compose.app.yml         # prod trên server (image theo digest, env_file từ deploy.sh)
 │   └── compose.local.yml
@@ -260,7 +261,7 @@ unbutu-platform/
 ├── tools/{k6,chaos}/
 └── .github/workflows/          # ci.yml · release.yml · deploy.yml
 ```
-Đã có code: `api-gateway`, `catalog-service`. Chưa có: các service còn lại, `libs/*`, `frontend/`, `deploy/compose.observability.yml`, `pull_request_template.md`.
+Đã có code: `api-gateway`, `catalog-service`. Chưa có: các service còn lại, `libs/*`, `frontend/`, `pull_request_template.md`. `deploy/compose.observability.yml` đã soạn, chưa dựng.
 
 ### 6.2 Pipeline
 | Sự kiện | Việc làm | Môi trường |
@@ -304,7 +305,7 @@ Lưu ý: GitHub Environments có **required reviewers** cho repo **public** mi�
 
 Cơ chế:
 - **Linux**: user `deploy`, `dev`, không thuộc nhóm `docker` (nhóm docker = root); quyền cụ thể qua `/etc/sudoers.d/`.
-- **Tailscale ACL** (grants): `autogroup:member` → `*` và `tag:ci` → `100.67.135.86:22` **đã áp dụng**, kèm `tests` trong policy; `group:dev` → port SigNoz UI chưa làm.
+- **Tailscale ACL** (grants): `autogroup:member` → `*` và `tag:ci` → `100.67.135.86:22` **đã áp dụng**, kèm `tests` trong policy; `group:dev` → `unbutu:8443` (SigNoz UI) chưa làm.
 - **SigNoz**: tài khoản admin (người dùng) + tài khoản `developer` role Viewer (xem log/trace/dashboard, không sửa alert/cấu hình). Kiểm chứng giới hạn role của bản Community khi dựng.
 - **GitHub**: environment `production` cần duyệt + chỉ nhánh `main` **đã làm**; branch protection `main` (bắt PR + CI xanh) **chưa bật**.
 

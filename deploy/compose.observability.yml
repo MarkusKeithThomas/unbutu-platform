@@ -1,0 +1,192 @@
+# Compose project `observability` trên SERVER: SigNoz tự host (ADR-0006).
+# Gốc: SigNoz Foundry v0.4.0 (docs/examples/docker/compose) – giữ nguyên tên service/container vì config trong
+# deploy/signoz/ trỏ tới chúng. Khác bản gốc: image ghim version, metastore SQLite (thay Postgres riêng),
+# mem_limit, UI chỉ 127.0.0.1:3301, OTLP không mở port ra máy, collector đọc log Docker, tắt gửi thống kê.
+#
+# Chạy (admin, trên server – không qua CI): xem docs/runbooks/signoz.md
+#   docker compose -p observability -f compose.observability.yml up -d --wait
+# Truy cập: https://unbutu.tail3c11f4.ts.net:8443 (tailscale serve → 127.0.0.1:3301, chỉ trong tailnet).
+#
+# Nâng version: đổi đồng thời SIGNOZ_VERSION + OTELCOL_VERSION theo release notes, rồi `up -d --force-recreate`
+# toàn bộ stack (không restart lẻ từng service – keeper/ClickHouse mất kết nối).
+
+x-versions:
+  signoz: &signoz-image signoz/signoz:v0.148.1
+  otelcol: &otelcol-image signoz/signoz-otel-collector:v0.144.15
+  clickhouse: &clickhouse-image clickhouse/clickhouse-server:25.12.5
+  keeper: &keeper-image clickhouse/clickhouse-keeper:25.12.5
+
+x-common: &common
+  restart: unless-stopped
+  networks: [signoz-network]
+
+x-clickhouse-dsn: &clickhouse-dsn
+  SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN: tcp://signoz-telemetrystore-clickhouse-0-0:9000
+  SIGNOZ_OTEL_COLLECTOR_TIMEOUT: 10m
+
+name: observability
+
+services:
+  # Tải hàm histogramQuantile cho ClickHouse (chạy 1 lần rồi thoát).
+  signoz-telemetrystore-clickhouse-user-scripts:
+    <<: *common
+    image: *clickhouse-image
+    container_name: signoz-telemetrystore-clickhouse-user-scripts
+    restart: on-failure
+    mem_limit: 256m
+    command:
+      - bash
+      - -c
+      - |-
+        version="v0.0.1"
+        node_os=$$(uname -s | tr '[:upper:]' '[:lower:]')
+        node_arch=$$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
+        echo "Fetching histogram-binary for $${node_os}/$${node_arch}"
+        cd /tmp
+        wget -O histogram-quantile.tar.gz "https://github.com/SigNoz/signoz/releases/download/histogram-quantile%2F$${version}/histogram-quantile_$${node_os}_$${node_arch}.tar.gz"
+        tar -xvzf histogram-quantile.tar.gz
+        mv histogram-quantile /var/lib/clickhouse/user_scripts/histogramQuantile
+    volumes:
+      - signoz-telemetrystore-user-scripts:/var/lib/clickhouse/user_scripts
+
+  signoz-telemetrykeeper-clickhousekeeper-0:
+    <<: *common
+    image: *keeper-image
+    container_name: signoz-telemetrykeeper-clickhousekeeper-0
+    mem_limit: 256m
+    entrypoint: [/usr/bin/clickhouse-keeper, --config-file=/etc/clickhouse-keeper/keeper.yaml]
+    healthcheck:
+      test: [CMD, clickhouse-keeper-client, -h, localhost, -p, "9181", -q, ls]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - signoz-telemetrykeeper-0-data:/var/lib/clickhouse-keeper
+      - ./signoz/keeper/keeper.yaml:/etc/clickhouse-keeper/keeper.yaml:ro
+
+  signoz-telemetrystore-clickhouse-0-0:
+    <<: *common
+    image: *clickhouse-image
+    container_name: signoz-telemetrystore-clickhouse-0-0
+    # ClickHouse đọc giới hạn cgroup và tự đặt max_server_memory_usage ≈ 90% của mem_limit.
+    mem_limit: 2g
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    depends_on:
+      signoz-telemetrykeeper-clickhousekeeper-0:
+        condition: service_healthy
+      signoz-telemetrystore-clickhouse-user-scripts:
+        condition: service_completed_successfully
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+      CLICKHOUSE_CONFIG: /etc/clickhouse-server/config.yaml
+    healthcheck:
+      test: [CMD, wget, --spider, -q, "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - signoz-telemetrystore-0-0-data:/var/lib/clickhouse
+      - signoz-telemetrystore-user-scripts:/var/lib/clickhouse/user_scripts:ro
+      - ./signoz/clickhouse/config.yaml:/etc/clickhouse-server/config.yaml:ro
+      - ./signoz/clickhouse/functions.yaml:/etc/clickhouse-server/functions.yaml:ro
+
+  # Tạo/nâng schema ClickHouse (chạy 1 lần rồi thoát).
+  signoz-telemetrystore-migrator:
+    <<: *common
+    image: *otelcol-image
+    container_name: signoz-telemetrystore-migrator
+    restart: on-failure
+    mem_limit: 256m
+    depends_on:
+      signoz-telemetrystore-clickhouse-0-0:
+        condition: service_healthy
+    entrypoint: [/bin/sh]
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate ready &&
+        /signoz-otel-collector migrate bootstrap &&
+        /signoz-otel-collector migrate sync up &&
+        /signoz-otel-collector migrate async up
+    environment: *clickhouse-dsn
+
+  # UI + query + alert. Metastore SQLite trong volume (gọn hơn 1 Postgres riêng).
+  signoz-signoz-0:
+    <<: *common
+    image: *signoz-image
+    container_name: signoz-signoz-0
+    mem_limit: 512m
+    depends_on:
+      signoz-telemetrystore-clickhouse-0-0:
+        condition: service_healthy
+      signoz-telemetrystore-migrator:
+        condition: service_completed_successfully
+    environment:
+      SIGNOZ_TELEMETRYSTORE_PROVIDER: clickhouse
+      SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN: tcp://signoz-telemetrystore-clickhouse-0-0:9000
+      SIGNOZ_SQLSTORE_PROVIDER: sqlite
+      SIGNOZ_SQLSTORE_SQLITE_PATH: /var/lib/signoz/signoz.db
+      # Không gửi thống kê (statsreporter mặc định gửi cả email người dùng) về SigNoz.
+      SIGNOZ_STATSREPORTER_ENABLED: "false"
+      SIGNOZ_ANALYTICS_ENABLED: "false"
+    healthcheck:
+      test: [CMD, wget, --spider, -q, "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "127.0.0.1:3301:8080"     # chỉ loopback; tailscale serve :8443 → đây (ADR-0006). KHÔNG 0.0.0.0, KHÔNG 8080.
+    volumes:
+      - signoz-metastore-sqlite-0-data:/var/lib/signoz
+
+  # OTel Collector: nhận OTLP từ service (qua network `telemetry`) + đọc log Docker.
+  ingester:
+    <<: *common
+    image: *otelcol-image
+    container_name: signoz-ingester
+    mem_limit: 512m
+    # File log Docker là root:root 0640 → phải chạy root để đọc; chỉ mount read-only.
+    user: "0:0"
+    depends_on:
+      signoz-telemetrystore-migrator:
+        condition: service_completed_successfully
+    entrypoint: [/bin/sh]
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate sync check &&
+        /signoz-otel-collector --config=/etc/otel-collector-config.yaml --manager-config=/etc/opamp-config.yaml --copy-path=/var/tmp/collector-config.yaml
+    environment:
+      <<: *clickhouse-dsn
+      LOW_CARDINAL_EXCEPTION_GROUPING: "false"
+    networks:
+      signoz-network:
+        aliases: [signoz-ingester]
+      telemetry:
+        aliases: [otel-collector]   # service prod gửi OTLP tới http://otel-collector:4318 (URL từ biến môi trường)
+    # Không publish 4317/4318 ra máy: chỉ container trong network `telemetry` gửi được.
+    volumes:
+      - ./signoz/ingester/ingester.yaml:/etc/otel-collector-config.yaml:ro
+      - ./signoz/ingester/opamp.yaml:/etc/opamp-config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+
+networks:
+  signoz-network:
+    name: signoz-network
+  # Network dùng chung để service prod gửi OTLP; compose.app.yml sẽ khai báo `external: true` khi gắn OTel (chưa làm).
+  telemetry:
+    name: telemetry
+
+volumes:
+  signoz-metastore-sqlite-0-data:
+    name: signoz-metastore-sqlite-0-data
+  signoz-telemetrykeeper-0-data:
+    name: signoz-telemetrykeeper-0-data
+  signoz-telemetrystore-0-0-data:
+    name: signoz-telemetrystore-0-0-data
+  signoz-telemetrystore-user-scripts:
+    name: signoz-telemetrystore-user-scripts
