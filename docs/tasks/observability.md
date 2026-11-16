@@ -22,17 +22,20 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
   (chạy bằng `ssh unbutu 'sudo docker exec -i signoz-telemetrystore-clickhouse-0-0 clickhouse-client' <<'SQL' … SQL`)
 - Sau đó: đánh dấu `[x]` mục "Observability" ở ARCHITECTURE §8 (Giai đoạn 0) kèm ngày.
 
-### OBS-2 · Metrics của server + container · TODO · Claude
-- Mục tiêu: dashboard CPU, RAM, disk, network của `unbutu` và CPU/RAM của từng container, thay cho việc ssh vào chạy `docker stats`.
-- Collector `v0.144.15` đã có sẵn `hostmetricsreceiver` và `dockerstatsreceiver` (đã kiểm tra trong `components.go`).
-- **Cần hỏi người dùng trước khi làm:**
-  - `docker_stats` cần mount `/var/run/docker.sock`. Mount `:ro` vẫn gọi được **toàn bộ** Docker API, tức là tương đương root.
-  - Phương án thay thế: chỉ dùng `hostmetrics`, hoặc dùng docker-socket-proxy chỉ cho phép `GET /containers`.
-- `hostmetrics` cần mount `/:/hostfs:ro` + `root_path: /hostfs`. Scrapers: cpu, memory, load, filesystem, network, disk.
-  Gắn `resource.host.name=unbutu`.
-- Sửa: `deploy/signoz/ingester/ingester.yaml` (receivers + pipeline metrics), `deploy/compose.observability.yml` (mount).
-  Rồi dựng lại theo runbook bước 1–2.
-- **Xong khi:** SigNoz → Infrastructure/Dashboards thấy được host `unbutu` (+ container nếu chọn), RAM của collector < 512m.
+### OBS-2 · Metrics của server + container · DOING (PR #15, chờ merge → dựng) · Claude
+- Đã chốt (người dùng, 2026-11-16): **docker-socket-proxy chỉ-đọc** (`tecnativa/docker-socket-proxy:v0.5.0`), collector không mount `docker.sock`.
+- Đã code (PR #15):
+  - `hostmetrics` (cpu, load, memory, paging, disk, filesystem `/`) qua `/proc` + `/sys` mount `:ro`, không mount cả `/`.
+  - `docker_stats` qua proxy, `api_version` 1.44.
+  - Collector `cap_drop: ALL`; gắn `host.name=unbutu`.
+- Không có metrics network của host (scraper `network` sẽ đọc network namespace của collector). Muốn có thì cần cách khác, để sau.
+- **Rủi ro còn lại:** inspect container trả cả Env (mật khẩu DB của prod). Chặn bằng rule haproxy riêng nếu cần.
+- **Còn lại:** merge #15 → runbook bước 1–2 → kiểm tra.
+- **Xong khi:**
+  - ClickHouse `signoz_metrics` có metric `system.cpu.*`, `system.memory.*`, `container.*` với `host.name=unbutu` và `compose.service`.
+  - `system.filesystem.usage` của `/` khớp `df -h /`.
+  - SigNoz Dashboards dựng được biểu đồ CPU/RAM host + từng container.
+  - Collector < 512m, proxy < 64m.
 
 ### OBS-3 · Gateway access log · TODO · Claude
 - Hạng mục P0 trong ARCHITECTURE §4.4. Global filter ghi 1 dòng/request: method, path, status, latency, client IP, `requestId`, traceId.
