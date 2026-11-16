@@ -14,10 +14,11 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | `api-gateway` | Chạy prod. Có routing, `X-Request-Id`, timeout. Chưa có access log, JWT, CORS |
 | `catalog-service` | Chạy prod, đang có API ở bảng dưới |
 | `identity`, `inventory`, `booking`, `payment`, `notification` | Mới có khung thư mục + README, chưa có code |
-| `libs/platform-starter`, `libs/event-contracts` | Mới có khung, chưa có code |
+| `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
+| `libs/event-contracts` | Mới có khung, chưa có code |
 | `frontend/` | Mới có `vercel.json` (rewrite `/api/*` → server), chưa chọn framework |
 | CI/CD | Xong: PR → CI → merge `main` → Release (image theo digest) → Deploy **cần Approve**, tự rollback |
-| Observability | SigNoz đang chạy (ADR-0006), thu log Docker của prod. Chưa có trace/metrics |
+| Observability | SigNoz (ADR-0006): log JSON ECS + trace + metrics (OpenTelemetry Java agent, chỉ prod) + metrics host/container, dashboard dạng code |
 
 **API đang có** (public: `https://unbutu.tail3c11f4.ts.net`, local: `http://localhost:8080`):
 
@@ -36,7 +37,7 @@ Dự kiến: Redis, RabbitMQ (Saga/Outbox), OpenTelemetry.
 ## Cấu trúc repo
 ```
 services/<tên>/          # mỗi service = 1 module Gradle = 1 image = 1 container (package com.unbutu.ticket.<tên>)
-libs/                    # platform-starter (requestId, log, lỗi chuẩn…), event-contracts – chưa có code
+libs/                    # platform-starter (requestId, access log), event-contracts – chưa có code
 deploy/
   compose.local.yml      # chạy ở máy dev (Makefile dùng)
   compose.app.yml        # prod – chỉ deploy.sh dùng, không chạy tay
@@ -100,5 +101,6 @@ Rollback tay: Actions → Deploy → Run workflow với SHA cũ.
 Cấu hình/secret prod: khai báo trong repo private `pro-ticket-workload`, value chỉ nằm trên AWS (ADR-0004). Repo này không chứa secret.
 
 ## Observability
-SigNoz chỉ mở trong tailnet: `https://unbutu.tail3c11f4.ts.net:8443`. Hiện thu log stdout của các container prod.
-Trace/metrics sẽ có sau khi gắn OpenTelemetry. Vận hành: [docs/runbooks/signoz.md](docs/runbooks/signoz.md).
+SigNoz chỉ mở trong tailnet: `https://unbutu.tail3c11f4.ts.net:8443`. Prod: log JSON ECS (có `trace_id`, `requestId`),
+trace + metrics qua OpenTelemetry Java agent, metrics host/container; dashboard trong `deploy/signoz/dashboards/`.
+Local **không** bật agent và log dạng text cho dễ đọc. Vận hành: [docs/runbooks/signoz.md](docs/runbooks/signoz.md).

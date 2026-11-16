@@ -10,26 +10,27 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ## Đang mở
 
-### OBS-3 · Gateway access log · TODO · Claude
-- Hạng mục P0 trong ARCHITECTURE §4.4. Global filter ghi 1 dòng/request: method, path, status, latency, client IP, `requestId`, traceId.
-- Dùng chung với OBS-4 nếu làm sau (lúc đó log theo định dạng ECS).
-- **Xong khi:** gọi `/api/catalog/ping` → SigNoz Logs thấy dòng của `api-gateway` có `requestId` trùng header `X-Request-Id` trả về.
-
-### OBS-4 · `libs/platform-starter` + OpenTelemetry cho service · BLOCKED (người dùng chốt cách đo đạc) · Claude
-- **Quyết định cần chốt:** Micrometer Tracing/Metrics + OTLP exporter (đề xuất: nhẹ, theo hướng Spring Boot)
-  hay OpenTelemetry Java agent (+50–100 MB mỗi JVM). Chốt xong thì ghi vào ADR-0006 §"Còn mở" và ARCHITECTURE §12.
-- Các việc:
-  1. Log JSON ECS ra stdout, có `trace.id`/`span.id` + `requestId` (MDC); `service.name`, `service.version` = `APP_VERSION`.
-  2. Filter `X-Request-Id` → MDC + baggage; propagate qua `RestClient.Builder`/`WebClient.Builder` được inject.
-  3. Export OTLP: `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`. Khai báo trong `pro-ticket-workload`
-     (`prod/services/<svc>/env.yaml`, không phải secret) và `application-local.yml`.
-  4. `deploy/compose.app.yml`: các service nối network `telemetry` (`external: true`). **Rủi ro:** nếu stack observability
-     chưa chạy thì network chưa tồn tại và deploy prod lỗi. Cần xử lý, ví dụ `deploy.sh` tạo network nếu thiếu.
-  5. `deploy/signoz/ingester/ingester.yaml`: khi định dạng log đã chốt, xoá các nhánh parse thừa
-     (`sev_flat`/`sev_nested`, `trace_ecs`/`trace_mdc`; có TODO trong file).
-  6. Local: chạy collector trong `compose.local.yml` hay tắt export (chọn khi làm).
-- **Xong khi:** 1 request qua gateway → catalog có **trace waterfall** trong SigNoz Traces; log của cả 2 service lọc được
-  theo cùng `trace_id`/`requestId`; metrics JVM + HTTP hiện trong SigNoz.
+### OBS-3 + OBS-4 · Access log + OpenTelemetry Java agent · DOING (code xong trong PR, chờ merge → deploy → kiểm chứng) · Claude
+- Đã chốt (người dùng, 2026-11-16): **OpenTelemetry Java agent** `v2.33.1`, chỉ bật ở prod (ADR-0006 §"Đo đạc service").
+- Đã code:
+  - Gateway `AccessLogWebFilter` (bỏ `/actuator`, IP thật lấy từ `X-Forwarded-For` khi đi qua Funnel).
+  - `libs/platform-starter`: `RequestIdFilter` → MDC, `AccessLogFilter`, `RestClient` truyền `X-Request-Id`; catalog dùng starter.
+  - Dockerfile `ADD --checksum` agent. `compose.app.yml`: `JDK_JAVA_OPTIONS`, `OTEL_*`, `LOGGING_STRUCTURED_*`, network `telemetry` (external).
+  - Collector: đọc log ECS lồng nhau + `trace_id`/`span_id`, bỏ span `/actuator`.
+- Đã kiểm ở máy: gateway + agent → access log JSON có `trace_id` trùng span SERVER, `requestId`, `client.address`. Test đều qua.
+- **Chưa kiểm được trước merge:** cách SigNoz lưu attribute lồng nhau (`http.*`, `url.*`, `log.logger`) – lệnh chạy collector
+  tạm ghi vào ClickHouse bị auto mode chặn. Sau deploy: kiểm tra key trong `attributes_string`/`attributes_number`.
+  Nếu bị lưu thành chuỗi JSON thì thêm bước làm phẳng trong `ingester.yaml`.
+- **Sau merge, theo thứ tự:**
+  1. Dựng lại observability: runbook bước 1, rồi `up -d --force-recreate --wait` cả stack (vì đổi config ClickHouse + collector).
+  2. Approve deploy prod (image mới có agent).
+  3. `curl -H 'X-Request-Id: obs4-check' https://unbutu.tail3c11f4.ts.net/api/catalog/events`.
+- **Xong khi:**
+  - SigNoz Traces có waterfall `api-gateway` → `catalog-service` (+ span JDBC).
+  - Logs của cả 2 service lọc được theo cùng `trace_id` và `requestId = obs4-check`.
+  - Metrics JVM/HTTP (`jvm.*`, `http.server.request.duration`) có `service.name`.
+  - Không có trace `/actuator`.
+  - RAM của gateway/catalog vẫn < 512m (xem dashboard container).
 
 ### OBS-5 · S1: dashboard RED + SLO + alert · BLOCKED (cần OBS-2, OBS-4) · Claude + người dùng
 - Dashboard RED (rate, errors, duration) cho từng service + JVM. SLO: 99% request < 300 ms.
@@ -44,13 +45,14 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 - Tailscale ACL: `group:dev` → `unbutu:8443` (hiện `autogroup:member → *`).
 - **Xong khi:** tài khoản dev xem được Logs/Traces nhưng không sửa được alert/cấu hình; ssh `unbutu` bị chặn.
 
-### OBS-7 · ClickHouse ăn CPU khi rảnh · TODO · Claude
-- Đo 2026-11-16: ClickHouse ~15% CPU, ~490 MB RAM khi gần như không có dữ liệu (stack mới chạy 18 phút).
-  Sau OBS-2 (thêm metrics host + container mỗi 30 giây): ~23% CPU, ~550 MB RAM.
-  Giờ có thể xem trên SigNoz: `container.cpu.*` với `compose.service = signoz-telemetrystore-clickhouse-0-0`.
-- Đo lại sau vài giờ: `ssh unbutu 'docker stats --no-stream | grep clickhouse'`. Nếu vẫn > 5%: giảm system log
-  (`metric_log`, `trace_log`, `asynchronous_metric_log`, `query_log`…) trong `deploy/signoz/clickhouse/config.yaml`.
-- **Xong khi:** CPU lúc rảnh < 5%, hoặc ghi lại lý do chấp nhận.
+### OBS-7 · ClickHouse ăn CPU khi rảnh · DOING (cùng PR với OBS-3/4) · Claude
+- Đo 2026-11-16: ~32% CPU, 600 MB. Query + merge chỉ khoảng 50 giây CPU / 30 phút (khoảng 3% một nhân).
+  Phần còn lại là ClickHouse tự giám sát: `system` tạo 1041 part mới / 30 phút (SigNoz: 298); `trace_log` 1.35 triệu dòng
+  (query profiler); `zookeeper_log` 730 nghìn dòng.
+- Đã sửa `deploy/signoz/clickhouse/config.yaml`: tắt query profiler, `zookeeper_log`, `processors_profile_log`;
+  `asynchronous_metrics_update_period_s` 60. **Giữ** `query_log` + `part_log` (dùng để chẩn đoán).
+- **Xong khi:** sau khi tạo lại stack, CPU của ClickHouse lúc rảnh < 5%, hoặc ghi lại mức đo được và lý do chấp nhận.
+  Xem trên dashboard container `observability/signoz-telemetrystore-clickhouse-0-0`.
 
 ## Nợ kỹ thuật đã biết (chấp nhận, không phải task)
 - Collector không có extension `file_storage` → `start_at: end`. Log sinh ra lúc collector tắt không vào SigNoz (vẫn có trong `docker logs`).

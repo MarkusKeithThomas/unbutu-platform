@@ -19,6 +19,14 @@ LABEL org.opencontainers.image.source="https://github.com/MarkusKeithThomas/unbu
 RUN useradd --system --uid 10001 --user-group --no-create-home app
 WORKDIR /app
 
+# OpenTelemetry Java agent (ADR-0006, OBS-4): trace + metrics JVM/HTTP gửi OTLP tới SigNoz, gắn trace_id/span_id vào MDC.
+# Ghim version + sha256 (Docker kiểm tra khi build). Agent CHỈ chạy khi JDK_JAVA_OPTIONS có -javaagent (compose.app.yml);
+# local (compose.local.yml, IntelliJ) không bật. Layer ít đổi → đặt trước code.
+ADD --checksum=sha256:e43a270df53c6f423e0ab157be9c27ccc01d5dc3232e162fe54777573db2f149 \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.33.1/opentelemetry-javaagent.jar \
+    /opt/otel/opentelemetry-javaagent.jar
+RUN chmod 444 /opt/otel/opentelemetry-javaagent.jar
+
 # Thứ tự từ ít thay đổi → hay thay đổi: sửa code chỉ làm mới layer cuối (vài trăm KB) khi build/push.
 COPY --from=extract /work/extracted/dependencies/ ./
 COPY --from=extract /work/extracted/spring-boot-loader/ ./

@@ -19,6 +19,13 @@ spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-
 spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
 spring-boot-starter-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
 
+# Dùng trong libs/platform-starter (auto-configuration; compileOnly – service tự mang starter của mình)
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure" }
+spring-boot-restclient = { module = "org.springframework.boot:spring-boot-restclient" }
+spring-web = { module = "org.springframework:spring-web" }
+jakarta-servlet-api = { module = "jakarta.servlet:jakarta.servlet-api" }
+slf4j-api = { module = "org.slf4j:slf4j-api" }
+
 # Gateway (version từ Spring Cloud BOM)
 spring-cloud-starter-gateway-server-webflux = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webflux" }
 
