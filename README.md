@@ -1,51 +1,104 @@
-# unbutu-platform – Hệ thống đặt vé (microservice)
+# unbutu-platform – Hệ thống đặt vé sự kiện/phim (microservice)
 
-Dự án luyện kỹ năng backend senior: microservice Spring Boot, CI/CD, observability (SigNoz/OpenTelemetry), phân quyền, API Gateway.
+Dự án luyện kỹ năng backend senior trong môi trường giống công ty:
+microservice Spring Boot, CI/CD có duyệt deploy, observability (SigNoz/OpenTelemetry), phân quyền, API Gateway.
+Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tailscale Funnel.
 
-- Kiến trúc & hạ tầng: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Quyết định kiến trúc: [docs/adr/](docs/adr/)
-- Từng service: `services/<tên>/README.md`
+- Kiến trúc, hạ tầng, lộ trình: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Quyết định kiến trúc: [docs/adr/](docs/adr/) · Runbook: [docs/runbooks/](docs/runbooks/) · Nhật ký setup: [docs/setup-steps.md](docs/setup-steps.md)
+
+## Trạng thái (2026-11-16)
+
+| Thành phần | Trạng thái |
+|---|---|
+| `api-gateway` | Chạy prod. Có routing, `X-Request-Id`, timeout. Chưa có access log, JWT, CORS |
+| `catalog-service` | Chạy prod, đang có API ở bảng dưới |
+| `identity`, `inventory`, `booking`, `payment`, `notification` | Mới có khung thư mục + README, chưa có code |
+| `libs/platform-starter`, `libs/event-contracts` | Mới có khung, chưa có code |
+| `frontend/` | Mới có `vercel.json` (rewrite `/api/*` → server), chưa chọn framework |
+| CI/CD | Xong: PR → CI → merge `main` → Release (image theo digest) → Deploy **cần Approve**, tự rollback |
+| Observability | SigNoz đang chạy (ADR-0006), thu log Docker của prod. Chưa có trace/metrics |
+
+**API đang có** (public: `https://unbutu.tail3c11f4.ts.net`, local: `http://localhost:8080`):
+
+| Method | Đường dẫn | Ghi chú |
+|---|---|---|
+| GET | `/api/catalog/ping` | Kiểm tra sống (smoke test của deploy) |
+| GET | `/api/catalog/events` | Danh sách sự kiện (prod rỗng; local có dữ liệu mẫu) |
+| GET | `/api/catalog/events/{id}` | Chi tiết sự kiện |
+| GET | `/api/catalog-service/bich-phuong` | API demo |
+
+## Công nghệ
+Java 21 · Spring Boot 4.1 · Spring Cloud Gateway 5 (WebFlux) · PostgreSQL 17 + Flyway · Gradle Kotlin DSL ·
+Docker Compose · GitHub Actions + GHCR · Tailscale (Funnel, OIDC) · AWS SSM/Secrets Manager (cấu hình prod) · SigNoz.
+Dự kiến: Redis, RabbitMQ (Saga/Outbox), OpenTelemetry.
+
+## Cấu trúc repo
+```
+services/<tên>/          # mỗi service = 1 module Gradle = 1 image = 1 container (package com.unbutu.ticket.<tên>)
+libs/                    # platform-starter (requestId, log, lỗi chuẩn…), event-contracts – chưa có code
+deploy/
+  compose.local.yml      # chạy ở máy dev (Makefile dùng)
+  compose.app.yml        # prod – chỉ deploy.sh dùng, không chạy tay
+  compose.observability.yml + signoz/   # SigNoz trên server – admin dựng tay (docs/runbooks/signoz.md)
+  docker/service.Dockerfile · postgres/init/ · scripts/deploy.sh
+docs/                    # adr/, runbooks/, postmortems/, diagrams/, setup-steps.md
+.github/workflows/       # ci.yml · release.yml · deploy.yml
+```
 
 ## Chạy local
 
-**Cần có:** Java 21, Docker Desktop đang chạy, `make`, IntelliJ.
+**Cần có:** Java 21, Docker Desktop **đang chạy**, `make`, IntelliJ (để debug).
 
-Mỗi service có **1 port cố định** trên máy, giống nhau dù chạy trong container hay trong IntelliJ:
+`compose.local.yml` hiện chạy **`postgres`, `catalog-service`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
+Port cố định trên máy, giống nhau dù chạy trong container hay IntelliJ (đặt trước cho cả service chưa có code):
 
 | Service | Port | | Service | Port |
 |---|---|---|---|---|
-| api-gateway | 8080 | | booking-service | 8084 |
-| identity-service | 8081 | | payment-service | 8085 |
-| catalog-service | 8082 | | notification-service | 8086 |
-| inventory-service | 8083 | | postgres | 5432 |
+| api-gateway | 8080 | | booking-service | 8084 *(chưa có)* |
+| identity-service | 8081 *(chưa có)* | | payment-service | 8085 *(chưa có)* |
+| catalog-service | 8082 | | notification-service | 8086 *(chưa có)* |
+| inventory-service | 8083 *(chưa có)* | | postgres | 5432 |
 
-### Chạy toàn bộ trong container
+### Lệnh `make` (gõ `make` để xem danh sách)
 ```bash
-make up                      # build jar + image, chạy tất cả
-make up s=catalog-service    # chỉ 1 service (+ hạ tầng nó cần)
-make restart s=catalog-service   # sau khi sửa code
-make logs s=catalog-service · make ps · make down · make clean (xoá cả dữ liệu DB)
-make build                   # build + toàn bộ test (như CI)
+make up                          # build jar + image, chạy tất cả
+make up s=catalog-service        # chỉ 1 service (+ hạ tầng nó cần)
+make restart s=catalog-service   # build lại + khởi động lại sau khi sửa code
+make logs s=catalog-service      # xem log · make ps: trạng thái
+make down                        # tắt (giữ dữ liệu DB) · make clean: tắt + XOÁ dữ liệu DB
+make build                       # build + toàn bộ test (như CI) · make test: chỉ test · make jar: jar, bỏ test
+curl localhost:8080/api/catalog/events
 ```
 
-### Debug 1 service trong IntelliJ (các service khác vẫn trong container)
-1. `make ide s=booking-service` – chạy mọi thứ trong container **trừ** booking-service; gateway được trỏ sang
-   `host.docker.internal:8084` (bản chạy trong IntelliJ). Nhiều service: `make ide s="booking-service payment-service"`.
-2. IntelliJ → chạy **Debug** `BookingServiceApplication` với biến môi trường `SPRING_PROFILES_ACTIVE=local`
-   (lần đầu: Run → Edit Configurations → Spring Boot/Application → Environment variables).
-   Profile `local` (`application-local.yml`) dùng port cố định, DB `localhost:5432`, service khác ở `localhost:<port>`.
-3. Đặt breakpoint, gọi qua gateway `curl localhost:8080/api/...` hoặc gọi thẳng `localhost:8084`.
-   Sửa code → Rerun trong IntelliJ (không cần build image).
+### Debug 1 service trong IntelliJ (các service khác vẫn chạy trong container)
+1. `make ide s=catalog-service`: chạy mọi thứ trong container **trừ** `catalog-service`. Gateway được trỏ sang
+   `host.docker.internal:8082`, tức là bản đang chạy trong IntelliJ.
+2. IntelliJ: chạy **Debug** `CatalogServiceApplication` với biến môi trường `SPRING_PROFILES_ACTIVE=local`.
+   Lần đầu cần đặt ở Run → Edit Configurations → Environment variables. Profile `local` (`application-local.yml`)
+   dùng port cố định, DB `localhost:5432`, và gọi service khác ở `localhost:<port>`.
+3. Đặt breakpoint, rồi gọi qua gateway (`curl localhost:8080/api/catalog/...`) hoặc gọi thẳng `localhost:8082`.
+   Sửa code thì chỉ cần Rerun trong IntelliJ, không phải build image.
 4. Xong: `make up` để đưa service về lại container.
 
-### Dữ liệu mẫu
-Chỉ có ở local và integration test (`db/seed-local/`, Flyway nạp khi profile `local` hoặc qua `compose.local.yml`); prod khởi động với bảng rỗng.
-Nếu DB local tạo trước 2026-11-15 báo lỗi checksum Flyway → `make clean && make up` một lần.
+### Database & dữ liệu mẫu
+- `localhost:5432`. Mỗi service có 1 database + 1 user riêng, ví dụ `catalog_db` / user `catalog` / mật khẩu `catalog`
+  (chỉ ở local). Bảng do Flyway của từng service tạo khi khởi động: `services/<svc>/src/main/resources/db/migration/V<n>__<mô tả>.sql`.
+- Dữ liệu mẫu chỉ có ở local và integration test, ví dụ `services/catalog-service/src/main/resources/db/seed-local/`
+  (Flyway nạp khi chạy profile `local`). Prod khởi động với bảng rỗng.
+- DB local tạo trước 2026-11-15 mà báo lỗi checksum Flyway thì chạy `make clean && make up` một lần.
 
-### Database
-`localhost:5432` · mỗi service 1 database + user riêng, vd. `catalog_db` / user `catalog` / mật khẩu `catalog`.
-Bảng do Flyway của từng service tạo (`src/main/resources/db/migration/V<n>__<mô tả>.sql`) khi service khởi động.
+## Quy trình làm việc
+- Mỗi việc: `git checkout main && git pull --ff-only`, tạo nhánh mới (`feat/…`, `fix/…`, `docs/…`), mở PR, rồi merge.
+  Commit theo Conventional Commits.
+- PR chỉ sửa tài liệu (`*.md`, `docs/**`) hoặc cấu hình SigNoz/local thì không chạy CI/Release/Deploy (`paths-ignore`).
 
 ## Deploy prod
-Không deploy tay: merge `main` → CI → Release → **Approve** trong tab Actions (environment `production`). Rollback: Actions → Deploy → Run workflow với SHA cũ.
-Các bước đã setup: [docs/setup-steps.md](docs/setup-steps.md) · cấu hình/secret prod: repo private `pro-ticket-workload` (ADR-0004).
+Không deploy tay. Merge `main` → CI → Release (build image **một lần**, deploy theo digest) → **Approve** trong tab Actions
+(environment `production`) → `deploy.sh` trên server, có smoke test và tự rollback khi lỗi.
+Rollback tay: Actions → Deploy → Run workflow với SHA cũ.
+Cấu hình/secret prod: khai báo trong repo private `pro-ticket-workload`, value chỉ nằm trên AWS (ADR-0004). Repo này không chứa secret.
+
+## Observability
+SigNoz chỉ mở trong tailnet: `https://unbutu.tail3c11f4.ts.net:8443`. Hiện thu log stdout của các container prod.
+Trace/metrics sẽ có sau khi gắn OpenTelemetry. Vận hành: [docs/runbooks/signoz.md](docs/runbooks/signoz.md).
