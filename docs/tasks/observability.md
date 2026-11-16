@@ -10,18 +10,6 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ## Đang mở
 
-### OBS-1 · Đặt retention 7 ngày · TODO · người dùng (UI)
-- Settings → General → Retention: log, trace, metrics = **7 ngày**.
-- Hiện tại (đo 2026-11-16) vẫn là mặc định: log 15 ngày, trace 15 ngày (`1296000s`), metrics 30 ngày (`2592000s`).
-- **Xong khi** query sau ra 7 / 604800 / 604800:
-  ```sql
-  SELECT default_expression FROM system.columns WHERE database='signoz_logs' AND table='logs_v2' AND name='_retention_days';
-  SELECT table, extract(create_table_query, 'toInterval[A-Za-z]+\\([^)]*\\)') FROM system.tables
-  WHERE (database, table) IN (('signoz_traces','signoz_index_v3'),('signoz_metrics','samples_v4'));
-  ```
-  (chạy bằng `ssh unbutu 'sudo docker exec -i signoz-telemetrystore-clickhouse-0-0 clickhouse-client' <<'SQL' … SQL`)
-- Sau đó: đánh dấu `[x]` mục "Observability" ở ARCHITECTURE §8 (Giai đoạn 0) kèm ngày.
-
 ### OBS-2 · Metrics của server + container · DOING (PR #15, chờ merge → dựng) · Claude
 - Đã chốt (người dùng, 2026-11-16): **docker-socket-proxy chỉ-đọc** (`tecnativa/docker-socket-proxy:v0.5.0`), collector không mount `docker.sock`.
 - Đã code (PR #15):
@@ -83,6 +71,7 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 - SigNoz ghim `v0.148.1`. v0.149 ghi log 2 lần, nên đọc release notes trước khi nâng.
 
 ## Đã xong
+- 2026-11-16 · OBS-1 retention **15 ngày** cho log/trace/metrics (người dùng chọn 15 thay vì 7), đã kiểm tra trong ClickHouse; tick mục Observability ở §8
 - 2026-11-16 · Chốt SigNoz thay ELK + Prometheus/Grafana (ADR-0006) · PR #10
 - 2026-11-16 · Compose `observability` + config collector/ClickHouse + runbook + label log prod · PR #11
 - 2026-11-16 · Dựng trên `unbutu` (bản `999200b`), UI `:8443` qua `tailscale serve` (chỉ tailnet), tạo admin, log thử vào được ClickHouse
