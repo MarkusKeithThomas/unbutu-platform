@@ -3,14 +3,14 @@
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-16.
 
-## Làm ngay (khi PR OBS-3/4/7 đã vào `main`)
-1. Dựng lại observability: `docs/runbooks/signoz.md` bước 1 → `up -d --force-recreate --wait`. Lý do: đổi config ClickHouse + collector.
-2. Nhắc người dùng **Approve** deploy prod (image mới có OTel agent). Kiểm tra `deploy-history.log` = ok.
-3. Kiểm chứng theo "Xong khi" của **OBS-3 + OBS-4** và **OBS-7** trong `docs/tasks/observability.md`.
-   Trước hết xem attribute lồng nhau của log JSON lưu ra sao (chưa kiểm được trước merge).
+## Làm ngay (khi PR `fix/obs-flatten-attrs-dedupe-requestid` đã vào `main`)
+1. Dựng lại observability: `docs/runbooks/signoz.md` bước 1 → `up -d --force-recreate --wait`. Lý do: đổi `ingester.yaml` + ClickHouse config.
+   **Ngay sau đó** kiểm tra collector không lỗi (`docker logs signoz-ingester`, OTTL `flatten` mới thêm). Nếu lỗi: dựng lại bằng config của `0181019`.
+2. Nhắc người dùng **Approve** deploy prod (gateway sửa header trùng).
+3. Kiểm chứng "Xong khi" của **OBS-3 + OBS-4** (attribute phẳng, 1 header) và **OBS-7** (đo CPU sau ≥ 30 phút).
 
 ## Đang chờ người dùng
-- Merge PR OBS-3/4/7. Merge xong rồi mới Approve deploy prod.
+- Merge PR sửa ở trên. Merge xong thì chờ Claude dựng lại observability rồi mới Approve deploy.
 
 ## Kiểm tra nhanh đầu phiên
 ```bash

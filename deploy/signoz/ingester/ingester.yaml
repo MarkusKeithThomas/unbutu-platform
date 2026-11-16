@@ -178,6 +178,18 @@ extensions:
     endpoint: 0.0.0.0:13133
 
 processors:
+  # Log JSON ECS lồng nhau ({"http":{"request":{"method":..}}}) mặc định bị lưu thành CHUỖI JSON ở attribute "http", "url"…
+  # → không lọc được. flatten() → key phẳng có dấu chấm (http.request.method, url.path, http.response.status_code – giữ
+  # kiểu số, log.logger, process.thread.name, error.stack_trace…). trace_id/span_id/@timestamp đã nằm ở cột riêng → xoá.
+  transform/flatten-logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - flatten(attributes)
+          - delete_key(attributes, "trace_id")
+          - delete_key(attributes, "span_id")
+          - delete_key(attributes, "@timestamp")
   # Healthcheck Docker gọi /actuator/health/* mỗi 10 giây → mỗi lần 1 trace, chỉ gây nhiễu (OBS-4). Bỏ span đó.
   filter/drop-actuator:
     error_mode: ignore
@@ -242,7 +254,7 @@ service:
   pipelines:
     logs:
       receivers: [otlp, filelog/docker]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, transform/flatten-logs, batch]
       exporters: [clickhouselogsexporter, signozmeter, metadataexporter]
     metrics:
       receivers: [otlp, hostmetrics, docker_stats]
