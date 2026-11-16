@@ -9,7 +9,6 @@
    `compose.service = signoz-telemetrystore-clickhouse-0-0`. Nếu vẫn > 5% → giảm system log trong `deploy/signoz/clickhouse/config.yaml`.
 
 ## Đang chờ người dùng
-- Merge PR docs `docs/obs-2-done`.
 - **OBS-4:** chốt cách đo đạc: Micrometer + OTLP (đề xuất) hay OpenTelemetry Java agent.
 
 ## Kiểm tra nhanh đầu phiên
