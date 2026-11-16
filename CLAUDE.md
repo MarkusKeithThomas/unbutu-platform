@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 Đọc **Handoff** (cuối file) trước. Chỉ mở **đúng mục cần** của `ARCHITECTURE.md` (~400 dòng) / `docs/setup-steps.md` / ADR khi việc đang làm đụng tới – không đọc hết để tiết kiệm token.
+Task theo từng mảng: `docs/tasks/<mảng>.md` – **chỉ đọc mục "Đang mở"**, mục "Đã xong" là lưu trữ, không đọc lại.
 
 ## Tóm tắt nhanh
 - Microservice Java Spring Boot, mỗi container = 1 service, Docker Compose trên 1 máy (`unbutu`, Ubuntu 24.04).
@@ -33,7 +34,7 @@
 
 **Việc tiếp theo (gợi ý thứ tự, hỏi người dùng trước khi bắt đầu)**
 1. Branch protection `main` (bắt PR + CI xanh) – chưa bật.
-2. SigNoz: đặt retention 7 ngày (UI) nếu chưa làm. Tiếp theo `libs/platform-starter` + nối network `telemetry` vào `compose.app.yml`: log JSON ECS, `requestId` vào MDC, OTLP trace/metrics (ARCHITECTURE §5, ADR-0006).
+2. Observability: xem `docs/tasks/observability.md` (OBS-1 retention → OBS-2 metrics server/container → OBS-3 access log → OBS-4 platform-starter + OTel, cần chốt Micrometer hay agent).
 3. Gateway P0 còn lại: access log, JWT, CORS (§4.4). 4. Phân quyền dev: user `dev`, SigNoz role Viewer, `group:dev` (§7).
 
 **Kiểm tra nhanh trạng thái (rẻ, chạy trước khi đọc tài liệu)**
