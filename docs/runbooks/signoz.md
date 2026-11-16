@@ -10,8 +10,11 @@ File nguồn: `deploy/compose.observability.yml` + `deploy/signoz/`. Thư mục 
 ## 1. Chép cấu hình lên server (từ Mac, trong repo đã `git pull` ở `main`)
 ```bash
 SHA=$(git rev-parse --short HEAD)
-tar czf - deploy/compose.observability.yml deploy/signoz \
-  | ssh unbutu "sudo mkdir -p /opt/unbutu-platform/observability && sudo tar xzf - -C /opt/unbutu-platform/observability --strip-components=1 && echo $SHA | sudo tee /opt/unbutu-platform/observability/REVISION"
+# git archive: lấy đúng nội dung đã commit. Đừng dùng tar của macOS: nó chép kèm file rác `._*` (AppleDouble).
+ssh unbutu 'sudo rm -rf /opt/unbutu-platform/observability/signoz'   # xoá config cũ để không sót file đã bị xoá trong repo
+git archive --format=tar HEAD deploy/compose.observability.yml deploy/signoz \
+  | ssh unbutu "sudo mkdir -p /opt/unbutu-platform/observability && sudo tar xf - -C /opt/unbutu-platform/observability --strip-components=1 && echo $SHA | sudo tee /opt/unbutu-platform/observability/REVISION"
+ssh unbutu 'cd /opt/unbutu-platform/observability && sudo docker compose -f compose.observability.yml config --quiet && echo CONFIG_OK'
 ```
 Kết quả: `/opt/unbutu-platform/observability/{compose.observability.yml,signoz/…,REVISION}`.
 
@@ -21,6 +24,12 @@ ssh unbutu 'cd /opt/unbutu-platform/observability && sudo docker compose -f comp
 ssh unbutu 'sudo docker compose -p observability ps -a --format "{{.Service}} {{.Status}}"'
 ```
 Kỳ vọng: `user-scripts` và `migrator` ở trạng thái **Exited (0)**. Keeper, ClickHouse và `signoz-signoz-0` **healthy**. `ingester` **Up**.
+
+> **Lần dựng đầu tiên, collector chưa thu gì cho tới khi có tài khoản admin (bước 4).** Collector nhận cấu hình từ SigNoz qua OpAMP.
+> Khi chưa có organization, SigNoz log `failed to find or create agent` (`orgs: 0`) và đẩy xuống pipeline `nop`.
+> Collector cũng log các lỗi `opamp … connection refused` / `Server returned an error response`. Lúc này các lỗi đó là bình thường.
+> Kiểm tra: `sudo docker exec signoz-ingester grep -A3 '^        logs:' /var/tmp/collector-config.yaml` phải thấy `clickhouselogsexporter`, không phải `nop`.
+> Collector không có lệnh `validate`; lỗi cấu hình chỉ lộ ra trong `docker logs signoz-ingester` lúc khởi động.
 Lần đầu migrator mất 1–3 phút. Nếu lỗi: `sudo docker logs signoz-telemetrystore-migrator`.
 
 ## 3. Mở UI trong tailnet (đã chốt phương án A, ADR-0006)
@@ -33,6 +42,7 @@ còn cổng 8443 **không** có Funnel. Kiểm tra từ ngoài tailnet: `curl --
 
 ## 4. Thiết lập ban đầu (làm ngay sau bước 3)
 1. **Đăng ký tài khoản admin ngay**: người đăng ký đầu tiên thành Admin, nên đừng để máy khác trong tailnet đăng ký trước.
+   Việc đăng ký tạo organization. Sau đó khoảng 30 giây collector nhận cấu hình thật (xem ghi chú ở bước 2).
 2. Settings → General → Retention: log, trace và metrics đều **7 ngày**.
 3. (Làm sau, theo §7) Tạo user `developer` với role Viewer.
 
@@ -42,7 +52,14 @@ Sau khi deploy:
 ```bash
 curl -s https://unbutu.tail3c11f4.ts.net/api/catalog/ping
 ```
-Vào SigNoz → Logs, lọc `service.name = catalog-service` và `deployment.environment = prod`. Log hiện tại là text, level được tách từ text.
+Vào SigNoz → Logs, lọc `service.name = catalog-service` và `deployment.environment = prod`.
+`/api/catalog/ping` **không ghi log**, và collector dùng `start_at: end` nên bỏ qua log khởi động cũ. Muốn thử ngay thì sinh log giả
+bằng một container chạy một lần (kết quả đã kiểm chứng ngày 2026-11-16: text → WARN; JSON → ERROR kèm trace_id):
+```bash
+ssh unbutu 'sudo docker run --rm --label com.docker.compose.project=prod --label com.docker.compose.service=log-test \
+  --log-opt labels=com.docker.compose.project,com.docker.compose.service alpine:3.20 sh -c \
+  "echo \"2026-01-01T00:00:00.000Z  WARN 1 --- [log-test] [main] demo : hello text\"; sleep 2"'
+``` Log hiện tại là text, level được tách từ text.
 Nếu không thấy log: `sudo docker logs signoz-ingester 2>&1 | tail -50` (lỗi operator `filelog/docker`), và kiểm tra log Docker có `attrs`:
 `sudo tail -1 /var/lib/docker/containers/$(docker inspect -f '{{.Id}}' prod-catalog-service-1)/*-json.log`.
 

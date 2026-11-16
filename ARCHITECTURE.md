@@ -1,7 +1,7 @@
 # Kiến trúc hệ thống – unbutu platform
 
 > Tài liệu nguồn sự thật (source of truth) về hạ tầng và kiến trúc. Cập nhật file này mỗi khi hạ tầng hoặc quyết định kiến trúc thay đổi.
-> Trạng thái: **Prod đang chạy (api-gateway + catalog-service + postgres) · CI/CD đầy đủ, deploy cần duyệt · Cấu hình/secret trên AWS · Chưa dựng observability (đã chốt SigNoz, ADR-0006)** (cập nhật 2026-11-16)
+> Trạng thái: **Prod đang chạy (api-gateway + catalog-service + postgres) · CI/CD đầy đủ, deploy cần duyệt · Cấu hình/secret trên AWS · SigNoz đang chạy (project `observability`, UI `https://unbutu.tail3c11f4.ts.net:8443` chỉ tailnet) – đã thu log Docker của prod, chưa có trace/metrics** (cập nhật 2026-11-16)
 > Các bước đã làm theo thứ tự: [docs/setup-steps.md](docs/setup-steps.md)
 
 ---
