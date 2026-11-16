@@ -1,7 +1,7 @@
 # Kiến trúc hệ thống – unbutu platform
 
 > Tài liệu nguồn sự thật (source of truth) về hạ tầng và kiến trúc. Cập nhật file này mỗi khi hạ tầng hoặc quyết định kiến trúc thay đổi.
-> Trạng thái: **Prod đang chạy (api-gateway + catalog-service + postgres) · CI/CD đầy đủ, deploy cần duyệt · Cấu hình/secret trên AWS · Chưa có ELK** (cập nhật 2026-11-15)
+> Trạng thái: **Prod đang chạy (api-gateway + catalog-service + postgres) · CI/CD đầy đủ, deploy cần duyệt · Cấu hình/secret trên AWS · Chưa dựng observability (đã chốt SigNoz, ADR-0006)** (cập nhật 2026-11-16)
 > Các bước đã làm theo thứ tự: [docs/setup-steps.md](docs/setup-steps.md)
 
 ---
@@ -83,10 +83,10 @@ Dự án là **môi trường luyện kỹ năng backend/vận hành giống mô
 | # | Mục tiêu | Thực hiện ở | Mục |
 |---|---|---|---|
 | G1 | CI/CD thật: PR → test → merge `main` → build image → deploy prod (cần duyệt), rollback theo healthcheck | GitHub Actions + GHCR + Tailscale | §6 |
-| G2 | Đóng vai người trace bug: tìm lỗi qua log tập trung, không SSH | Elasticsearch + Kibana + Filebeat | §5 |
-| G3 | Làm việc với hệ thống **theo phân quyền** (dev không có quyền vào prod) | Linux user, Tailscale ACL, Kibana RBAC, GitHub Environments | §7 |
+| G2 | Đóng vai người trace bug: tìm lỗi qua log/trace tập trung, không SSH | SigNoz (OpenTelemetry + ClickHouse), ADR-0006 | §5 |
+| G3 | Làm việc với hệ thống **theo phân quyền** (dev không có quyền vào prod) | Linux user, Tailscale ACL, SigNoz role, GitHub Environments | §7 |
 | G4 | Nghiên cứu & cài các system design bắt buộc ở **API Gateway** | Spring Cloud Gateway + Redis | §4 |
-| G5 | **requestId/traceId xuyên suốt mọi service**, tra trên Elasticsearch | Micrometer Tracing (W3C `traceparent`) + `X-Request-Id` + ECS JSON log | §5 |
+| G5 | **requestId/traceId xuyên suốt mọi service**, tra trên SigNoz | OpenTelemetry/OTLP (W3C `traceparent`) + `X-Request-Id` + ECS JSON log | §5 |
 | G6 | Lộ trình kỹ năng senior: metrics, incident, migration, saga, backup, load test, chaos, security | Xem checklist | §8 |
 
 ---
@@ -96,7 +96,7 @@ Dự án là **môi trường luyện kỹ năng backend/vận hành giống mô
 ### 4.1 Sơ đồ (trên unbutu)
 ```
 Internet ─▶ Funnel :443 ─▶ 127.0.0.1:8080 (prod gateway)
-Tailnet  ─▶ unbutu:5601 (Kibana)                                   ← chỉ trong tailnet
+Tailnet  ─▶ unbutu:<port> (SigNoz UI, bind IP Tailscale)           ← chỉ trong tailnet
 (Không có staging trên server – môi trường thứ 2 là local trên MacBook, ADR-0003.)
 
 ┌─ project "prod" (network prod_default) ─┐
@@ -106,10 +106,11 @@ Tailnet  ─▶ unbutu:5601 (Kibana)                                   ← chỉ
 │ rabbitmq ─▶ notification                │
 │ postgres (DB riêng/service)             │
 └──────────────┬──────────────────────────┘
-               │ stdout JSON log (ECS)
+               │ stdout JSON log (ECS) + OTLP (trace, metrics)
                ▼
-        ┌─ project "observability" ───────────────────────────────┐
-        │ filebeat (đọc log Docker) ─▶ elasticsearch ◀─ kibana     │
+        ┌─ project "observability" (ADR-0006) ─────────────────────┐
+        │ otel-collector (đọc log Docker + nhận OTLP :4317/:4318)   │
+        │   ─▶ clickhouse ◀─ signoz (UI, query, alert)             │
         └──────────────────────────────────────────────────────────┘
 ```
 
@@ -126,7 +127,7 @@ Tailnet  ─▶ unbutu:5601 (Kibana)                                   ← chỉ
 | `postgres` | PostgreSQL 17, 1 database + user riêng/service | | nội bộ |
 | `redis` | Rate limit (gateway), seat hold TTL (inventory) | | nội bộ |
 | `rabbitmq` | Event bất đồng bộ giữa service | | nội bộ |
-| `elasticsearch` / `kibana` / `filebeat` | Log tập trung | | project `observability` |
+| `signoz` / `clickhouse` / `otel-collector` | Log, metrics, trace, alert (ADR-0006) | | project `observability` |
 | `frontend` | UI trên Vercel – framework chưa chốt (đề xuất React + Vite) | | không chạy trên unbutu |
 
 Thư viện dùng chung: `libs/platform-starter` (requestId, ECS log, Problem Details, RestClient), `libs/event-contracts` (schema event).
@@ -155,7 +156,7 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 | readiness/liveness | `healthcheck` (Actuator) + `depends_on: condition: service_healthy` |
 | ConfigMap/Secret (+ External Secrets) | `env_file: env/<svc>.env` do `deploy.sh` sinh từ AWS SSM (bản đồ) + Secrets Manager (value) – ADR-0004 |
 | PersistentVolume | named volume |
-| RBAC | Linux user + Tailscale ACL + Kibana role (§7) |
+| RBAC | Linux user + Tailscale ACL + SigNoz role (§7) |
 
 ### 4.4 API Gateway – các hạng mục system design (nghiên cứu & cài dần)
 | Ưu tiên | Hạng mục | Cách làm (Spring Cloud Gateway) |
@@ -177,7 +178,7 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 | P2 | Response cache | `LocalResponseCache` filter hoặc Redis |
 | P2 | IP allow/deny, API key cho đối tác | Custom predicate/filter |
 | P2 | Idempotency key cho POST | Header `Idempotency-Key` + Redis |
-| P2 | Metrics | Actuator + Micrometer (`/actuator/prometheus`) – Prometheus/Grafana để sau |
+| P2 | Metrics | Actuator + Micrometer → OTLP → SigNoz (làm cùng S1) |
 | P3 | Aggregation / BFF | Endpoint gateway gộp nhiều service |
 
 ### 4.5 Quy ước bắt buộc
@@ -197,20 +198,22 @@ Chỉ 1 môi trường trên server (`prod`) – không có staging vì laptop k
 | Nhóm | Ước tính |
 |---|---|
 | prod: 7 service Spring Boot (~350 MB) + postgres + redis + rabbitmq | ~3 GB |
-| observability: ES (heap 1g, limit 2g) + Kibana + Filebeat | ~3 GB |
+| observability: SigNoz – ClickHouse (limit ~2 GB) + OTel Collector + SigNoz UI/query (ADR-0006) | ~3 GB |
 | OS + Docker + Tailscale | ~1 GB |
-| **Tổng** | **~7 GB** – còn ~4 GB dư cho S1/S4 (§8) và đỉnh tải; vẫn cân nhắc `-XX:+UseSerialGC`, giới hạn thread pool |
+| **Tổng** | **~7 GB** – còn ~4 GB dư cho S4 (§8) và đỉnh tải (S1 đã nằm trong SigNoz) và đỉnh tải; vẫn cân nhắc `-XX:+UseSerialGC`, giới hạn thread pool |
 
 ---
 
-## 5. Logging & tracing (G2, G5)
+## 5. Logging, tracing & metrics (G2, G5) – SigNoz (ADR-0006)
 
-### 5.1 Luồng log
+### 5.1 Luồng dữ liệu
 ```
-service (Logback, ECS JSON → stdout) → Docker json-file → filebeat (autodiscover, add_docker_metadata)
-  → elasticsearch: data stream logs-<env>-*   (ILM: xoá sau 7 ngày)
-  → kibana: Discover / dashboard
+log:    service (Logback, ECS JSON → stdout) → Docker json-file → otel-collector (đọc log Docker, gắn tên container)
+trace:  service ──OTLP──▶ otel-collector                       (URL từ biến môi trường)
+metric: service ──OTLP──▶ otel-collector
+          → clickhouse (TTL 7 ngày cho log/trace/metrics) → SigNoz UI: Logs / Traces / Dashboards / Alerts
 ```
+Log vẫn ra stdout nên `docker logs` vẫn đọc được khi SigNoz chết. Cách đo đạc (Micrometer + OTLP hay Java agent) chưa chốt (§12).
 
 ### 5.2 requestId xuyên service
 1. Request vào gateway: nếu có `X-Request-Id` thì dùng, không thì sinh UUID. Micrometer Tracing đồng thời tạo `traceId` và header W3C `traceparent`.
@@ -221,7 +224,7 @@ service (Logback, ECS JSON → stdout) → Docker json-file → filebeat (autodi
 6. (Sau này có RabbitMQ/Kafka) propagate header vào message.
 
 ### 5.3 Quy trình trace bug (vai trò dev)
-User báo lỗi + `requestId` (hiện trên màn hình lỗi FE) → Kibana Discover → query `requestId : "<id>"` (hoặc `trace.id`) → thấy log theo thứ tự thời gian ở gateway → order-service → user-service → tìm `log.level : ERROR` + stacktrace → xác định service/commit (`service.version` = git SHA của image).
+User báo lỗi + `requestId` (hiện trên màn hình lỗi FE) → SigNoz Logs → lọc `requestId = <id>` → lấy `trace.id` → mở trace waterfall (span nào chậm/lỗi) + log liên kết theo thời gian ở gateway → booking → inventory → tìm `log.level : ERROR` + stacktrace → xác định service/commit (`service.version` = git SHA của image).
 
 ---
 
@@ -249,7 +252,7 @@ unbutu-platform/
 ├── deploy/
 │   ├── docker/service.Dockerfile  # 1 Dockerfile dùng chung (layered jar, không chạy root)
 │   ├── postgres/init/          # tạo database cho từng service
-│   ├── filebeat/
+│   ├── signoz/                 # cấu hình SigNoz + otel-collector (ADR-0006)
 │   ├── scripts/deploy.sh       # deploy prod trên server: env từ AWS + compose theo digest + rollback
 │   ├── compose.app.yml         # prod trên server (image theo digest, env_file từ deploy.sh)
 │   └── compose.local.yml
@@ -297,12 +300,12 @@ Lưu ý: GitHub Environments có **required reviewers** cho repo **public** mi�
 |---|---|---|---|
 | **admin** | `chauhoaithuong` (máy MacBook) | Mọi thứ: SSH sudo, cấu hình server | – |
 | **deployer** | GitHub Actions (`tag:ci`) – **đã làm** | SSH user `deploy`, chỉ chạy `sudo -n deploy.sh -` (forced command + sudoers); Tailscale ACL chỉ `100.67.135.86:22` | shell tự do, sudo lệnh khác, đọc secret prod |
-| **developer** | Tài khoản Tailscale thứ 2 / thiết bị thứ 2 (đóng vai nhân viên) | Kibana (role chỉ đọc `logs-*`) – trace bug qua log, không SSH. Quyền thêm (vd. `docker compose -p prod ps` qua sudoers giới hạn) sẽ chốt khi làm §7 | SSH prod, đọc `.env`, sửa container prod, xem log prod chứa PII nếu bị ẩn |
+| **developer** | Tài khoản Tailscale thứ 2 / thiết bị thứ 2 (đóng vai nhân viên) | SigNoz (role Viewer) – trace bug qua log/trace, không SSH. Quyền thêm (vd. `docker compose -p prod ps` qua sudoers giới hạn) sẽ chốt khi làm §7 | SSH prod, đọc `.env`, sửa container prod, xem log prod chứa PII nếu bị ẩn |
 
 Cơ chế:
 - **Linux**: user `deploy`, `dev`, không thuộc nhóm `docker` (nhóm docker = root); quyền cụ thể qua `/etc/sudoers.d/`.
-- **Tailscale ACL** (grants): `autogroup:member` → `*` và `tag:ci` → `100.67.135.86:22` **đã áp dụng**, kèm `tests` trong policy; `group:dev` → `unbutu:5601` chưa làm.
-- **Kibana/ES security** (bản free có RBAC): user `elastic` (admin), role `developer` (read `logs-*`, Discover), có thể tách quyền xem `logs-prod-*`.
+- **Tailscale ACL** (grants): `autogroup:member` → `*` và `tag:ci` → `100.67.135.86:22` **đã áp dụng**, kèm `tests` trong policy; `group:dev` → port SigNoz UI chưa làm.
+- **SigNoz**: tài khoản admin (người dùng) + tài khoản `developer` role Viewer (xem log/trace/dashboard, không sửa alert/cấu hình). Kiểm chứng giới hạn role của bản Community khi dựng.
 - **GitHub**: environment `production` cần duyệt + chỉ nhánh `main` **đã làm**; branch protection `main` (bắt PR + CI xanh) **chưa bật**.
 
 ---
@@ -314,16 +317,16 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 ### Giai đoạn 0 – Nền (§4–§7)
 - [ ] API Gateway P0 (routing, requestId, access log, JWT, timeout, CORS)
 - [ ] 1 service mẫu end-to-end có ECS log + `traceId`/`requestId`
-- [ ] Observability: Elasticsearch + Kibana + Filebeat, ILM 7 ngày
+- [ ] Observability: SigNoz (ClickHouse + OTel Collector), giữ dữ liệu 7 ngày, UI chỉ trong tailnet (ADR-0006)
 - [x] CI/CD: PR test → merge main → build image → prod cần duyệt, rollback theo healthcheck (2026-11-15, ADR-0003/0004/0005)
-- [ ] Phân quyền: user `deploy`/`dev`, Tailscale ACL, Kibana role, branch protection
+- [ ] Phân quyền: user `deploy`/`dev`, Tailscale ACL, SigNoz role, branch protection
 - [x] ADR-0001: Docker Compose thay vì k3s/k8s (2026-11-15)
 
 ### Giai đoạn 1 – Ưu tiên cao
 | # | Kỹ năng | Bài tập / tiêu chí hoàn thành | RAM thêm |
 |---|---|---|---|
-| S1 | **Metrics + Alerting** (Prometheus, Grafana, Alertmanager) | Dashboard RED (rate, errors, duration) mỗi service + JVM; SLO vd. 99% request < 300 ms; alert error rate > 5% hoặc service down → Telegram | ~400 MB |
-| S2 | **Incident & Postmortem** | Cố ý gây ≥3 sự cố (DB chậm, memory leak, timeout dây chuyền); chỉ dùng Kibana/Grafana để tìm nguyên nhân; viết postmortem blameless + runbook cho từng loại | 0 |
+| S1 | **Metrics + Alerting** (OTel metrics → SigNoz dashboard + alert) | Dashboard RED (rate, errors, duration) mỗi service + JVM; SLO vd. 99% request < 300 ms; alert error rate > 5% hoặc service down → Telegram (webhook) | 0 (dùng SigNoz) |
+| S2 | **Incident & Postmortem** | Cố ý gây ≥3 sự cố (DB chậm, memory leak, timeout dây chuyền); chỉ dùng SigNoz (log, trace, metrics) để tìm nguyên nhân; viết postmortem blameless + runbook cho từng loại | 0 |
 | S3 | **DB migration zero-downtime** (Flyway, expand/contract) | Migration chạy trong pipeline; đổi tên 1 cột qua 3 lần deploy, không request nào lỗi trong lúc deploy | 0 |
 | S4 | **Giao dịch phân tán** (RabbitMQ, Saga, Outbox) | Luồng đặt vé §4.2.1 (`booking → inventory → payment`) có compensation khi lỗi/hết hạn hold; Outbox không mất event; consumer idempotent; `traceId` đi qua message | ~150 MB |
 | S5 | **Backup & restore drill** | `pg_dump` tự động hằng ngày ra ngoài máy; restore thử hằng tháng; ghi RPO/RTO đo được | 0 |
@@ -357,7 +360,7 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 ### Ràng buộc tài nguyên
 - Thêm S1 + S4 → tổng ~8.5–9 / 11 GiB (§4.6). Không có staging trên server (ADR-0003).
 - **Không dùng Kafka** (~1 GB+); dùng RabbitMQ (hoặc Redpanda nếu muốn API Kafka).
-- Chưa thêm Tempo/Jaeger; `traceId` trên Kibana là đủ cho giai đoạn này.
+- Tracing waterfall đã có trong SigNoz, không cần Tempo/Jaeger riêng (ADR-0006).
 
 ---
 
@@ -385,20 +388,20 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - Pin hỏng + chỉ 1 máy → không HA; cúp điện/mất wifi = downtime. Nên mua UPS hoặc thay pin.
 - Băng thông phụ thuộc upload mạng nhà + giới hạn của Funnel; thêm 1 hop relay → độ trễ cao hơn VPS.
 - Funnel chỉ hỗ trợ port công khai 443/8443/10000; domain cố định `*.ts.net`, phụ thuộc Tailscale.
-- RAM: prod + ELK ~7 GB / 11 GiB (§4.6); không có staging nên thay đổi đi thẳng từ local lên prod – phụ thuộc vào test (Testcontainers) + duyệt deploy + rollback.
+- RAM: prod + SigNoz ~7 GB / 11 GiB (§4.6), ClickHouse phải giới hạn bộ nhớ; không có staging nên thay đổi đi thẳng từ local lên prod – phụ thuộc vào test (Testcontainers) + duyệt deploy + rollback.
 - Server dùng **access key dài hạn** (IAM user `unbutu-server`, chỉ đọc) ở `/root/.aws` – lộ root = lộ cấu hình prod. Nợ kỹ thuật: IAM Roles Anywhere (ADR-0004).
 - Laptop 2015, 1 ổ đĩa, không RAID → cần **backup Postgres** định kỳ (pg_dump ra ngoài máy) – chưa làm.
 
 ## 11. Lộ trình nâng cấp hạ tầng
 - **Có tên miền** → Cloudflare Tunnel (`cloudflared` → `127.0.0.1:8080`), chỉ đổi URL trong `vercel.json`.
 - **Cần ổn định** → chuyển `deploy/` sang VPS, đổi URL trong `vercel.json`. Không đổi code.
-- **Distributed tracing dạng waterfall** → OpenTelemetry Collector + Jaeger/Tempo (cùng traceId đã có) – khi có thêm RAM.
+- **Đổi/thêm backend observability** (Grafana LGTM, Datadog…) → chỉ đổi exporter ở OTel Collector, không sửa service (ADR-0006).
 - **Học K8s** → chuyển compose sang manifest k3s, giữ nguyên image.
 
 ## 12. Quyết định
 Đã chốt:
 - [x] Docker Compose (không k3s/k8s).
-- [x] Log tập trung: Elasticsearch + Kibana + Filebeat; trace qua `traceId` + `X-Request-Id`.
+- [x] Observability: **SigNoz tự host** (log + metrics + trace + alert), đo đạc theo OpenTelemetry; trace qua `traceId` + `X-Request-Id` (ADR-0006, thay ELK + Prometheus/Grafana).
 - [x] 2 môi trường: **local** (MacBook) + **prod** (`unbutu`, qua CI/CD); không staging vì thiếu RAM (ADR-0003). Merge `main` → build image một lần → deploy prod cần duyệt (GitHub Environment `production`).
 - [x] Bài toán: đặt vé sự kiện/phim, 7 service (§4.2) + 2 thư viện dùng chung.
 - [x] Gradle Kotlin DSL, Java 21 (ADR-0002). Package gốc `com.unbutu.ticket`.
@@ -412,6 +415,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:
+- [ ] Đo đạc OTel: Micrometer + OTLP exporter (đề xuất, nhẹ) hay OpenTelemetry Java agent (ADR-0006).
 - [ ] Frontend: React + Vite (đề xuất)?
 - [ ] Bật BIOS "Power On When AC Detected" – chờ người dùng xác nhận.
 - [ ] Chiến lược backup DB.
