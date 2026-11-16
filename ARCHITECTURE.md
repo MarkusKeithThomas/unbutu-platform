@@ -163,7 +163,7 @@ Mọi bước mang cùng `traceId` + `requestId` (REST header và message header
 |---|---|---|
 | P0 | Routing theo path `/api/<domain>/**` | `RouteLocator` / `spring.cloud.gateway.routes` |
 | P0 | **Request ID / correlation** | Global filter: nhận hoặc sinh `X-Request-Id`, đẩy xuống downstream, trả về response header; tracing tự sinh `traceparent` |
-| P0 | Access log có cấu trúc | Global filter log: method, path, status, latency, client IP, userId, traceId |
+| P0 | Access log có cấu trúc | **Đã có** (`AccessLogWebFilter`): method, path, status, latency, client IP (XFF qua Funnel), requestId, trace_id. Còn userId (sau JWT) |
 | P0 | Xác thực JWT tại biên | Spring Security OAuth2 Resource Server; gateway chuyển `X-User-Id`/`X-User-Roles` xuống service |
 | P0 | Timeout | `httpclient.connect-timeout`, `response-timeout` theo route |
 | P0 | CORS | `globalcors` (dù đi qua Vercel rewrite vẫn cần khi gọi thẳng ts.net) |
@@ -317,8 +317,8 @@ Cơ chế:
 Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền + gateway. Làm theo thứ tự giai đoạn; mỗi mục xong thì **đánh dấu `[x]`, ghi ngày, và viết ADR** trong `docs/adr/NNNN-<tên>.md` (bối cảnh → quyết định → hệ quả). Bài tập sự cố ghi postmortem trong `docs/postmortems/`, runbook trong `docs/runbooks/`.
 
 ### Giai đoạn 0 – Nền (§4–§7)
-- [ ] API Gateway P0 (routing, requestId, access log, JWT, timeout, CORS)
-- [ ] 1 service mẫu end-to-end có ECS log + `traceId`/`requestId`
+- [ ] API Gateway P0 (routing, requestId, access log, JWT, timeout, CORS) – đã có: routing, requestId, timeout, access log (2026-11-16); còn JWT, CORS
+- [x] 1 service mẫu end-to-end có ECS log + `trace_id`/`requestId` (2026-11-16: gateway → catalog, trace waterfall + log cùng trace_id, ADR-0006)
 - [x] Observability: SigNoz (ClickHouse + OTel Collector), giữ dữ liệu 15 ngày, UI chỉ trong tailnet (2026-11-16, ADR-0006)
 - [x] CI/CD: PR test → merge main → build image → prod cần duyệt, rollback theo healthcheck (2026-11-15, ADR-0003/0004/0005)
 - [ ] Phân quyền: user `deploy`/`dev`, Tailscale ACL, SigNoz role, branch protection
