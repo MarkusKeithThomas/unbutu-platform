@@ -15,6 +15,7 @@ x-versions:
   otelcol: &otelcol-image signoz/signoz-otel-collector:v0.144.15
   clickhouse: &clickhouse-image clickhouse/clickhouse-server:25.12.5
   keeper: &keeper-image clickhouse/clickhouse-keeper:25.12.5
+  socketproxy: &socketproxy-image tecnativa/docker-socket-proxy:v0.5.0
 
 x-common: &common
   restart: unless-stopped
@@ -143,17 +144,43 @@ services:
     volumes:
       - signoz-metastore-sqlite-0-data:/var/lib/signoz
 
-  # OTel Collector: nhận OTLP từ service (qua network `telemetry`) + đọc log Docker.
+  # Cửa Docker API chỉ-đọc cho receiver docker_stats (OBS-2). Collector KHÔNG mount docker.sock:
+  # mount thẳng (kể cả :ro) = gọi được toàn bộ Docker API = root trên server.
+  # Proxy chỉ cho GET/HEAD tới /containers, /events, /version, /_ping (POST=0).
+  # Còn lộ: GET /containers/<id>/json trả cả Env của container (receiver cần inspect) – xem docs/tasks/observability.md.
+  signoz-docker-socket-proxy:
+    <<: *common
+    image: *socketproxy-image
+    container_name: signoz-docker-socket-proxy
+    mem_limit: 64m
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      PING: "1"
+      VERSION: "1"
+      POST: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+
+  # OTel Collector: nhận OTLP từ service (qua network `telemetry`) + đọc log Docker + metrics host/container.
   ingester:
     <<: *common
     image: *otelcol-image
     container_name: signoz-ingester
     mem_limit: 512m
-    # File log Docker là root:root 0640 → phải chạy root để đọc; chỉ mount read-only.
+    # File log Docker là root:root 0640 (thư mục 0710 root) → chạy uid 0 để đọc, nhưng BỎ HẾT capability:
+    # chủ sở hữu root vẫn đọc được file của mình; không đọc được /proc/<pid>/environ của tiến trình host
+    # (thiếu CAP_SYS_PTRACE / caps không là tập con), không ghi được gì vào mount :ro.
     user: "0:0"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       signoz-telemetrystore-migrator:
         condition: service_completed_successfully
+      signoz-docker-socket-proxy:
+        condition: service_started
     entrypoint: [/bin/sh]
     command:
       - -c
@@ -168,11 +195,15 @@ services:
         aliases: [signoz-ingester]
       telemetry:
         aliases: [otel-collector]   # service prod gửi OTLP tới http://otel-collector:4318 (URL từ biến môi trường)
+      docker-api: {}               # chỉ để gọi signoz-docker-socket-proxy:2375
     # Không publish 4317/4318 ra máy: chỉ container trong network `telemetry` gửi được.
     volumes:
       - ./signoz/ingester/ingester.yaml:/etc/otel-collector-config.yaml:ro
       - ./signoz/ingester/opamp.yaml:/etc/opamp-config.yaml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # hostmetrics (OBS-2): chỉ /proc + /sys của host, KHÔNG mount cả `/` (tránh lộ /root/.aws, /etc/shadow…).
+      - /proc:/hostfs/proc:ro
+      - /sys:/hostfs/sys:ro
 
 networks:
   signoz-network:
@@ -180,6 +211,10 @@ networks:
   # Network dùng chung để service prod gửi OTLP; compose.app.yml sẽ khai báo `external: true` khi gắn OTel (chưa làm).
   telemetry:
     name: telemetry
+  # Mạng riêng collector ↔ socket proxy; internal = không ra Internet.
+  docker-api:
+    name: signoz-docker-api
+    internal: true
 
 volumes:
   signoz-metastore-sqlite-0-data:
