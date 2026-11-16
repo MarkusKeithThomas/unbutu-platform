@@ -18,10 +18,26 @@ x-logging: &logging
     max-file: "3"
     labels: "com.docker.compose.project,com.docker.compose.service"
 
+# Observability của service Java (ADR-0006, OBS-4) – cấu hình hạ tầng chung, không phải secret.
+#  - OpenTelemetry Java agent (có sẵn trong image, Dockerfile) → trace + metrics JVM/HTTP gửi OTLP tới collector của SigNoz
+#    qua network `telemetry` (alias otel-collector). Log KHÔNG gửi qua OTLP: vẫn ra stdout, collector đọc log Docker.
+#  - Log stdout dạng JSON ECS (Spring Boot structured logging); agent gắn trace_id/span_id vào MDC.
+x-otel-env: &otel-env
+  JDK_JAVA_OPTIONS: -javaagent:/opt/otel/opentelemetry-javaagent.jar
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_LOGS_EXPORTER: none
+  OTEL_METRIC_EXPORT_INTERVAL: "30000"
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=prod,service.version=${APP_VERSION:-unknown}
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
+  LOGGING_STRUCTURED_ECS_SERVICE_ENVIRONMENT: prod
+  APP_VERSION: ${APP_VERSION:-unknown}
+
 x-service: &service
   restart: unless-stopped
   mem_limit: 512m
   logging: *logging
+  networks: [default, telemetry]
   depends_on:
     postgres:
       condition: service_healthy
@@ -57,7 +73,8 @@ services:
       - path: env/catalog-service.env
         format: raw
     environment:
-      APP_VERSION: ${APP_VERSION:-unknown}
+      <<: *otel-env
+      OTEL_SERVICE_NAME: catalog-service
 
   api-gateway:
     <<: *service
@@ -67,9 +84,16 @@ services:
       - path: env/api-gateway.env
         format: raw
     environment:
-      APP_VERSION: ${APP_VERSION:-unknown}
+      <<: *otel-env
+      OTEL_SERVICE_NAME: api-gateway
     ports:
       - "127.0.0.1:8080:8080"       # Tailscale Funnel → Internet
+
+networks:
+  # Do project `observability` tạo (compose.observability.yml). external → deploy prod KHÔNG tạo/xoá nó.
+  # Server mới: `docker network create telemetry` trước lần deploy đầu (docs/runbooks/signoz.md bước 0).
+  telemetry:
+    external: true
 
 volumes:
   pgdata:

@@ -4,6 +4,7 @@
 #   1. Thêm receiver filelog/docker: đọc log Docker (json-file) của container thuộc project `prod`.
 #   2. Thêm processor memory_limiter (đứng đầu mọi pipeline) và giảm kích thước batch cho máy 11 GiB.
 #   3. Pipeline logs nhận cả otlp lẫn filelog/docker.
+#   5. (OBS-4) Đọc log JSON ECS lồng nhau của Spring Boot 4 + trace_id/span_id của OTel Java agent; bỏ span /actuator.
 #   4. (OBS-2) Thêm hostmetrics (CPU/RAM/load/disk/paging của server qua /proc,/sys mount :ro) và docker_stats
 #      (CPU/RAM/IO từng container qua signoz-docker-socket-proxy) vào pipeline metrics; gắn host.name=unbutu.
 
@@ -55,9 +56,10 @@ receivers:
         if: 'attributes.time != nil'
         field: attributes.time
 
-      # 3a) Log JSON (ECS, quy ước §5 – khi libs/platform-starter bật). Hỗ trợ cả key phẳng ("log.level")
-      #     lẫn lồng nhau ({"log":{"level":..}}); trace lấy từ "trace.id" (ECS) hoặc "traceId" (MDC của Micrometer).
-      #     TODO khi làm platform-starter: chốt 1 định dạng rồi xoá nhánh thừa.
+      # 3a) Log JSON ECS của Spring Boot 4 (LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs, compose.app.yml) – dạng LỒNG NHAU:
+      #     {"@timestamp":..,"log":{"level":"INFO","logger":".."},"message":"..","trace_id":"..","span_id":"..",
+      #      "service":{..},"process":{..},"ecs":{..}, + key-value của access log: "http":{..},"url":{..},"requestId":".."}
+      #     trace_id/span_id do OpenTelemetry Java agent gắn vào MDC (OBS-4).
       - type: json_parser
         id: app_json
         if: 'body matches "^\\s*\\{"'
@@ -65,36 +67,33 @@ receivers:
         parse_to: attributes
         on_error: send_quiet
       - type: severity_parser
-        id: sev_flat
-        if: 'attributes["log.level"] != nil'
-        parse_from: attributes["log.level"]
-        on_error: send_quiet
-      - type: severity_parser
-        id: sev_nested
+        id: app_severity
         if: 'attributes.log != nil && attributes.log.level != nil'
         parse_from: attributes.log.level
         on_error: send_quiet
       - type: trace_parser
-        id: trace_ecs
-        if: 'attributes["trace.id"] != nil'
+        id: app_trace
+        if: 'attributes.trace_id != nil'
         trace_id:
-          parse_from: attributes["trace.id"]
+          parse_from: attributes.trace_id
         span_id:
-          parse_from: attributes["span.id"]
-        on_error: send_quiet
-      - type: trace_parser
-        id: trace_mdc
-        if: 'attributes.traceId != nil'
-        trace_id:
-          parse_from: attributes.traceId
-        span_id:
-          parse_from: attributes.spanId
+          parse_from: attributes.span_id
         on_error: send_quiet
       - type: move
         if: 'attributes.message != nil'
         from: attributes.message
         to: body
         on_error: send_quiet
+      # Bỏ trường trùng/không dùng (service.* đã có ở resource; trace đã nằm ở trace_id/span_id của bản ghi).
+      - type: remove
+        if: 'attributes.ecs != nil'
+        field: attributes.ecs
+      - type: remove
+        if: 'attributes.service != nil'
+        field: attributes.service
+      - type: remove
+        if: 'attributes.trace_flags != nil'
+        field: attributes.trace_flags
 
       # 3b) Log text mặc định của Spring Boot (hiện tại trên prod):
       #     "2026-11-15T14:50:38.446Z  INFO 1 --- [catalog-service] [...] logger : message"
@@ -179,6 +178,12 @@ extensions:
     endpoint: 0.0.0.0:13133
 
 processors:
+  # Healthcheck Docker gọi /actuator/health/* mỗi 10 giây → mỗi lần 1 trace, chỉ gây nhiễu (OBS-4). Bỏ span đó.
+  filter/drop-actuator:
+    error_mode: ignore
+    traces:
+      span:
+        - 'IsMatch(attributes["url.path"], "^/actuator")'
   # Mọi telemetry đều sinh trên server này; giữ nguyên host.name nếu nguồn đã tự đặt.
   resource/host:
     attributes:
@@ -249,7 +254,7 @@ service:
       exporters: [signozclickhousemeter]
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, signozspanmetrics/delta, signozspanmapper, signozllmpricing, batch]
+      processors: [memory_limiter, filter/drop-actuator, signozspanmetrics/delta, signozspanmapper, signozllmpricing, batch]
       exporters: [clickhousetraces, signozmeter, metadataexporter]
   telemetry:
     logs:

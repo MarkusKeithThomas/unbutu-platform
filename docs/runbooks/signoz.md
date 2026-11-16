@@ -7,6 +7,9 @@ File nguồn: `deploy/compose.observability.yml` + `deploy/signoz/`. Thư mục 
 - RAM trống ≥ 4 GiB (`free -h`). Stack dùng tối đa khoảng 3.8 GiB (ClickHouse 2g, SigNoz 512m, collector 512m, keeper 256m, 2 job một lần).
 - PR chứa compose đã merge vào `main`. Lấy file **đúng commit trên `main`**, không lấy từ nhánh.
 
+- Network `telemetry` phải tồn tại: project này tạo nó, `compose.app.yml` (prod) dùng `external: true`.
+  Server mới chưa dựng SigNoz thì chạy `docker network create telemetry` trước lần deploy prod đầu tiên.
+
 ## 1. Chép cấu hình lên server (từ Mac, trong repo đã `git pull` ở `main`)
 ```bash
 SHA=$(git rev-parse --short HEAD)
@@ -82,6 +85,10 @@ Dashboards → **New dashboard → Import JSON** → chọn file → **Import**.
 để dashboard luôn được review như code.
 **Bẫy:** dashboard mẫu của SigNoz có thể lưu sẵn giá trị biến (vd. `host.name = testingapp-server`), khiến panel trống mà không báo lỗi.
 Trước khi commit, kiểm tra `variables.*.selectedValue/defaultValue` = `unbutu`. Chẩn đoán panel trống: đọc query thật trong `system.query_log` của ClickHouse.
+
+## Đổi cấu hình ClickHouse / collector
+Sửa file mount (`deploy/signoz/clickhouse/*.yaml`, `ingester/*.yaml`) **không** làm compose tạo lại container.
+Sau bước 1: `sudo docker compose -f compose.observability.yml up -d --force-recreate --wait` (cả stack, không restart lẻ).
 
 ## Nâng version
 Đổi `x-versions` trong compose (SigNoz cùng collector theo release notes) → PR → merge → lặp lại bước 1, rồi

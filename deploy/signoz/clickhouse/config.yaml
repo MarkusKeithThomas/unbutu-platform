@@ -1,5 +1,9 @@
 # Lấy nguyên từ SigNoz Foundry v0.4.0 (docs/examples/docker/compose) – ADR-0006. Chỉ sửa khi nâng phiên bản.
 # Khác bản gốc: tên file config-0-0.yaml → config.yaml (user_directories.users_xml.path).
+# OBS-7 (2026-11-16): ClickHouse ăn ~32% CPU khi rảnh, chủ yếu do tự giám sát (system: 1041 part mới/30 phút so với 298 của
+# SigNoz; trace_log 1.35M dòng từ query profiler; zookeeper_log 730k dòng). Đã tắt: query profiler (trace_log),
+# zookeeper_log, processors_profile_log; asynchronous metrics 1s → 60s. GIỮ query_log + part_log (dùng để chẩn đoán).
+asynchronous_metrics_update_period_s: 60
 asynchronous_metric_log:
   ttl: event_date + INTERVAL 1 DAY DELETE
 dictionaries_config: '*_dictionary.xml'
@@ -36,6 +40,9 @@ processors_profile_log:
 profiles:
   default:
     allow_simdjson: 0
+    query_profiler_real_time_period_ns: 0   # OBS-7: tắt profiler lấy mẫu → trace_log gần như rỗng
+    query_profiler_cpu_time_period_ns: 0
+    log_processors_profiles: 0              # OBS-7: không ghi processors_profile_log
     load_balancing: random
     log_queries: 1
 query_log:
@@ -94,5 +101,3 @@ zookeeper:
   node:
   - host: signoz-telemetrykeeper-clickhousekeeper-0
     port: 9181
-zookeeper_log:
-  ttl: event_date + INTERVAL 1 DAY DELETE

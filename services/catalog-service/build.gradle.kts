@@ -3,6 +3,7 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":libs:platform-starter"))   // X-Request-Id → MDC, RestClient propagate
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.flyway)

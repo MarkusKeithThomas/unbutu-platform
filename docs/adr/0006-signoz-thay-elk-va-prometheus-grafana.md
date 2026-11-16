@@ -41,8 +41,17 @@ Server còn trống khoảng 10 GiB RAM (đo ngày 2026-11-16: prod dùng khoả
 - Tắt `statsreporter` (mặc định gửi thống kê **kèm email** về SigNoz) và `analytics`.
 - OTLP không publish ra máy; service prod gửi qua network Docker `telemetry` (alias `otel-collector`), sẽ nối khi gắn OTel.
 
-**Còn mở** (chốt khi gắn vào service): đo đạc bằng **Micrometer Tracing/Metrics + OTLP exporter** (nhẹ, theo hướng Spring Boot)
-hay dùng **OpenTelemetry Java agent** (tự đo nhiều thư viện, tốn thêm khoảng 50–100 MB mỗi JVM, khởi động chậm hơn).
+## Đo đạc service: OpenTelemetry Java agent (chốt 2026-11-16, OBS-4)
+Người dùng chọn **OpenTelemetry Java agent** thay vì Micrometer + OTLP exporter.
+- Agent `v2.33.1` nằm sẵn trong image (`deploy/docker/service.Dockerfile`, `ADD --checksum` sha256), **chỉ bật ở prod** qua
+  `JDK_JAVA_OPTIONS=-javaagent:…` (`compose.app.yml`). Local/IntelliJ không bật (log text, không cần collector).
+- Trace + metrics (JVM, HTTP server/client, JDBC…) → OTLP `http://otel-collector:4318` qua network `telemetry` (external
+  ở prod). `OTEL_LOGS_EXPORTER=none`: log vẫn đi stdout → collector đọc log Docker (quyết định 3 giữ nguyên).
+- Log JSON ECS = Spring Boot structured logging (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`, dạng lồng nhau). Agent gắn
+  `trace_id`/`span_id` vào MDC; `requestId` vào MDC bởi `libs/platform-starter` (servlet) – gateway ghi vào access log.
+- Collector bỏ span `/actuator/**` (healthcheck 10s/lần).
+- Đánh đổi đã chấp nhận: +RAM mỗi JVM (mem_limit 512m vẫn giữ – theo dõi trên dashboard container), khởi động chậm hơn,
+  agent là thành phần ngoài code (nâng version = đổi URL + sha256 trong Dockerfile).
 
 ## Phương án đã loại
 - **ELK + Prometheus/Grafana (kế hoạch cũ)**: 2 hệ, 2 UI, vẫn thiếu tracing. Tốn RAM tương đương hoặc hơn. Không khớp với công cụ ở công ty.

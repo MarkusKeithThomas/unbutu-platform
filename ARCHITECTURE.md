@@ -209,11 +209,11 @@ Chỉ 1 môi trường trên server (`prod`) – không có staging vì laptop k
 ### 5.1 Luồng dữ liệu
 ```
 log:    service (Logback, ECS JSON → stdout) → Docker json-file → otel-collector (đọc log Docker, gắn tên container)
-trace:  service ──OTLP──▶ otel-collector                       (URL từ biến môi trường)
-metric: service ──OTLP──▶ otel-collector
+trace:  service (OTel Java agent) ──OTLP──▶ otel-collector      (network telemetry, http://otel-collector:4318)
+metric: service (OTel Java agent: JVM, HTTP, JDBC) ──OTLP──▶ otel-collector
           → clickhouse (TTL 15 ngày cho log/trace/metrics) → SigNoz UI: Logs / Traces / Dashboards / Alerts
 ```
-Log vẫn ra stdout nên `docker logs` vẫn đọc được khi SigNoz chết. Cách đo đạc (Micrometer + OTLP hay Java agent) chưa chốt (§12).
+Log vẫn ra stdout nên `docker logs` vẫn đọc được khi SigNoz chết. Đo đạc bằng OpenTelemetry Java agent, chỉ bật ở prod (ADR-0006 §"Đo đạc service").
 
 ### 5.2 requestId xuyên service
 1. Request vào gateway: nếu có `X-Request-Id` thì dùng, không thì sinh UUID. Micrometer Tracing đồng thời tạo `traceId` và header W3C `traceparent`.
@@ -403,6 +403,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 ## 12. Quyết định
 Đã chốt:
 - [x] Docker Compose (không k3s/k8s).
+- [x] Đo đạc service: **OpenTelemetry Java agent** (chỉ prod), log JSON ECS stdout có `trace_id`/`span_id`/`requestId` (ADR-0006, 2026-11-16).
 - [x] Observability: **SigNoz tự host** (log + metrics + trace + alert), đo đạc theo OpenTelemetry; trace qua `traceId` + `X-Request-Id` (ADR-0006, thay ELK + Prometheus/Grafana).
 - [x] 2 môi trường: **local** (MacBook) + **prod** (`unbutu`, qua CI/CD); không staging vì thiếu RAM (ADR-0003). Merge `main` → build image một lần → deploy prod cần duyệt (GitHub Environment `production`).
 - [x] Bài toán: đặt vé sự kiện/phim, 7 service (§4.2) + 2 thư viện dùng chung.
@@ -417,7 +418,6 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:
-- [ ] Đo đạc OTel: Micrometer + OTLP exporter (đề xuất, nhẹ) hay OpenTelemetry Java agent (ADR-0006).
 - [ ] Frontend: React + Vite (đề xuất)?
 - [ ] Bật BIOS "Power On When AC Detected" – chờ người dùng xác nhận.
 - [ ] Chiến lược backup DB.
