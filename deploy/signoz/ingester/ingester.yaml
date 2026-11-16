@@ -4,6 +4,8 @@
 #   1. Thêm receiver filelog/docker: đọc log Docker (json-file) của container thuộc project `prod`.
 #   2. Thêm processor memory_limiter (đứng đầu mọi pipeline) và giảm kích thước batch cho máy 11 GiB.
 #   3. Pipeline logs nhận cả otlp lẫn filelog/docker.
+#   4. (OBS-2) Thêm hostmetrics (CPU/RAM/load/disk/paging của server qua /proc,/sys mount :ro) và docker_stats
+#      (CPU/RAM/IO từng container qua signoz-docker-socket-proxy) vào pipeline metrics; gắn host.name=unbutu.
 
 receivers:
   otlp:
@@ -106,6 +108,33 @@ receivers:
           parse_from: attributes.level
         on_error: send_quiet
 
+  # Metrics của server `unbutu`. Chỉ mount /proc và /sys của host vào /hostfs (không mount cả `/`).
+  # Không bật scraper `network`: /proc/net trỏ theo network namespace của collector → số liệu của container, không phải host.
+  # `filesystem` chỉ lấy "/": statfs(/hostfs) đi qua overlay của container → ra dung lượng LV gốc (đối chiếu `df -h /`).
+  hostmetrics:
+    collection_interval: 30s
+    root_path: /hostfs
+    scrapers:
+      cpu: {}
+      load: {}
+      memory: {}
+      paging: {}
+      disk: {}
+      filesystem:
+        include_mount_points:
+          mount_points: ["/"]
+          match_type: strict
+
+  # Metrics từng container (CPU, RAM, IO, network) qua proxy chỉ-đọc. Engine 29.9 chỉ nhận API >= 1.40.
+  docker_stats:
+    endpoint: tcp://signoz-docker-socket-proxy:2375
+    api_version: "1.44"
+    collection_interval: 30s
+    timeout: 10s
+    container_labels_to_metric_labels:
+      com.docker.compose.project: compose.project
+      com.docker.compose.service: compose.service
+
 connectors:
   signozmeter:
     dimensions:
@@ -150,6 +179,12 @@ extensions:
     endpoint: 0.0.0.0:13133
 
 processors:
+  # Mọi telemetry đều sinh trên server này; giữ nguyên host.name nếu nguồn đã tự đặt.
+  resource/host:
+    attributes:
+      - key: host.name
+        value: unbutu
+        action: insert
   # mem_limit container = 512m → giới hạn mềm 400 MiB, từ chối dữ liệu mới thay vì bị OOM kill.
   memory_limiter:
     check_interval: 1s
@@ -205,8 +240,8 @@ service:
       processors: [memory_limiter, batch]
       exporters: [clickhouselogsexporter, signozmeter, metadataexporter]
     metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
+      receivers: [otlp, hostmetrics, docker_stats]
+      processors: [memory_limiter, resource/host, batch]
       exporters: [signozclickhousemetrics, signozmeter, metadataexporter]
     metrics/meter:
       receivers: [signozmeter]
