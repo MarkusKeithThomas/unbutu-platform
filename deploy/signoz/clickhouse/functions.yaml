@@ -1,0 +1,14 @@
+# Lấy nguyên từ SigNoz Foundry v0.4.0 (docs/examples/docker/compose) – ADR-0006. Chỉ sửa khi nâng phiên bản.
+functions:
+  argument:
+  - name: buckets
+    type: Array(Float64)
+  - name: counts
+    type: Array(Float64)
+  - name: quantile
+    type: Float64
+  command: ./histogramQuantile
+  format: CSV
+  name: histogramQuantile
+  return_type: Float64
+  type: executable

@@ -23,10 +23,23 @@ Server còn trống khoảng 10 GiB RAM (đo ngày 2026-11-16: prod dùng khoả
 4. **Trace + metrics**: service đẩy OTLP tới collector qua Docker network (`http://<collector>:4318`), URL lấy từ biến môi trường.
    Header `traceparent` + `X-Request-Id` vẫn propagate như §5.2.
 5. **Giữ dữ liệu 7 ngày** (TTL ClickHouse, cấu hình trong SigNoz) cho log, trace và metrics. Mỗi container có `mem_limit`.
-6. **Truy cập UI chỉ trong tailnet**: publish port bind vào IP Tailscale của `unbutu`, **không bao giờ `0.0.0.0`**
-   (Docker bỏ qua ufw). Đây là ngoại lệ thứ 2 sau `api-gateway`. Port cụ thể chốt khi dựng, nhưng không được dùng 8080 vì trùng gateway.
+6. **Truy cập UI chỉ trong tailnet** (chốt 2026-11-16): Docker publish `127.0.0.1:3301` (không dùng 8080 vì trùng gateway),
+   rồi `tailscale serve --bg --https=8443 http://127.0.0.1:3301` → `https://unbutu.tail3c11f4.ts.net:8443`, **không Funnel**.
+   Bỏ phương án bind IP Tailscale: nếu Docker khởi động trước tailscaled thì IP 100.x chưa có và container không mở được port. Cách mới còn có HTTPS.
 7. **Phân quyền**: dùng role có sẵn của SigNoz (Admin/Editor/Viewer). Role `developer` (§7) là Viewer. Phải kiểm chứng
    những gì bản Community hỗ trợ khi dựng.
+
+## Triển khai (2026-11-16)
+- SigNoz đã bỏ bộ compose trong repo chính, chuyển sang **Foundry** (`foundryctl` sinh compose từ `casting.yaml`). Ở đây **không cài Foundry**:
+  lấy output mẫu của Foundry v0.4.0, chỉnh tay, rồi commit vào `deploy/compose.observability.yml` + `deploy/signoz/` để review được trong PR.
+- Phiên bản ghim: `signoz/signoz:v0.148.1`, `signoz/signoz-otel-collector:v0.144.15`, ClickHouse/Keeper `25.12.5`.
+  Không lên v0.149: bản đó ghi log body 2 lần (chuyển sang JSON native), tốn thêm CPU, RAM và ổ đĩa.
+- Metastore dùng **SQLite** trong volume (Foundry mặc định dùng thêm 1 container Postgres) để tiết kiệm RAM.
+- Log: collector đọc `/var/lib/docker/containers` (read-only, **chạy root** vì file là `root 0640`). `compose.app.yml` gắn label
+  `com.docker.compose.project/service` vào từng dòng log; collector chỉ giữ project `prod`. Collector không có `file_storage`,
+  nên đặt `start_at: end`: log sinh ra lúc collector tắt sẽ không vào SigNoz (vẫn xem được bằng `docker logs`).
+- Tắt `statsreporter` (mặc định gửi thống kê **kèm email** về SigNoz) và `analytics`.
+- OTLP không publish ra máy; service prod gửi qua network Docker `telemetry` (alias `otel-collector`), sẽ nối khi gắn OTel.
 
 **Còn mở** (chốt khi gắn vào service): đo đạc bằng **Micrometer Tracing/Metrics + OTLP exporter** (nhẹ, theo hướng Spring Boot)
 hay dùng **OpenTelemetry Java agent** (tự đo nhiều thư viện, tốn thêm khoảng 50–100 MB mỗi JVM, khởi động chậm hơn).

@@ -9,9 +9,19 @@
 # Khác compose.local.yml: không build, không mở port service ra máy; chỉ gateway bind 127.0.0.1:8080
 # (Tailscale Funnel → Internet).
 
+# Log json-file (giống daemon.json) + gắn label compose vào mỗi dòng ("attrs") để OTel Collector của SigNoz
+# biết dòng log thuộc service/project nào (deploy/signoz/ingester/ingester.yaml, ADR-0006).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+    labels: "com.docker.compose.project,com.docker.compose.service"
+
 x-service: &service
   restart: unless-stopped
   mem_limit: 512m
+  logging: *logging
   depends_on:
     postgres:
       condition: service_healthy
@@ -27,6 +37,7 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     mem_limit: 512m
+    logging: *logging
     env_file:                       # POSTGRES_USER, POSTGRES_PASSWORD, SERVICE_DATABASES, <SVC>_DB_PASSWORD
       - path: env/postgres.env
         format: raw                 # value giữ nguyên, không diễn giải $ hay dấu nháy

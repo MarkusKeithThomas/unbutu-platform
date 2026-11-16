@@ -1,0 +1,2 @@
+# Lấy nguyên từ SigNoz Foundry v0.4.0 (docs/examples/docker/compose) – ADR-0006. Chỉ sửa khi nâng phiên bản.
+server_endpoint: ws://signoz-signoz-0:4320/v1/opamp

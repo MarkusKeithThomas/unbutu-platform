@@ -8,10 +8,11 @@
 - Truy cập server: `ssh unbutu` (qua Tailscale, có passwordless sudo). Dùng `ssh -o BatchMode=yes unbutu '...'` cho lệnh không tương tác.
 
 ## Quy tắc khi làm việc
-- Trên server: chỉ `api-gateway` được publish port, và chỉ `127.0.0.1:8080` (ngoại lệ duy nhất: SigNoz UI bind IP Tailscale, ADR-0006). Docker bỏ qua ufw – không bao giờ publish ra `0.0.0.0`. (Local: mỗi service mở port cố định trên `127.0.0.1` để debug hybrid.)
+- **Bắt đầu mỗi việc mới**: `git checkout main && git pull --ff-only`, rồi tạo nhánh mới từ `main` (`feat/…`, `fix/…`, `docs/…`). Không làm tiếp trên nhánh của PR cũ (PR có thể đã merge/squash).
+- Trên server: chỉ `api-gateway` được publish port, và chỉ `127.0.0.1:8080` (ngoại lệ duy nhất: SigNoz UI `127.0.0.1:3301` → `tailscale serve :8443`, chỉ tailnet – ADR-0006). Docker bỏ qua ufw – không bao giờ publish ra `0.0.0.0`. (Local: mỗi service mở port cố định trên `127.0.0.1` để debug hybrid.)
 - API công khai dưới `/api/<domain>/**`; service gọi nhau bằng `http://<service-name>:8080`, URL từ biến môi trường.
 - Log ra stdout dạng JSON ECS, luôn có `trace.id` + `requestId`; gọi service khác chỉ qua `RestClient.Builder`/`WebClient.Builder` được inject (để propagate trace header).
-- 2 môi trường: local (MacBook) và prod (server, qua CI/CD) – không có staging. 2 compose project trên server: `prod` (Funnel → 127.0.0.1:8080), `observability` (SigNoz: ClickHouse + OTel Collector, UI chỉ bind IP Tailscale – ADR-0006).
+- 2 môi trường: local (MacBook) và prod (server, qua CI/CD) – không có staging. 2 compose project trên server: `prod` (Funnel → 127.0.0.1:8080), `observability` (SigNoz: ClickHouse + OTel Collector – `deploy/compose.observability.yml`, admin chạy tay theo `docs/runbooks/signoz.md`, ADR-0006).
 - Cấu hình + secret prod (ADR-0004): biến của service khai báo trong repo private `~/pro-ticket-workload` (`prod/services/<svc>/env.yaml`, PR → plan, merge → apply); value chỉ ở AWS Secrets Manager. Không có `.env` gõ tay, không đưa value vào git/Terraform/log. Deploy prod chỉ qua `deploy.sh` (`deploy/scripts/`).
 - `pro-ticket-workload/bootstrap/` chỉ admin apply từ Mac – Claude chuẩn bị `plan -out`, người dùng tự chạy `apply`.
 - Thêm service mới: thêm folder `prod/services/<service>/env.yaml` ở `pro-ticket-workload` + service vào `deploy/compose.app.yml` (`env_file: env/<service>.env`, format raw); thêm vào `deploy/compose.local.yml` (port cố định theo bảng trong README, `depends_on` chỉ hạ tầng), tạo `application-local.yml`, thêm database vào `SERVICE_DATABASES`, thêm `PORT_<service>` trong Makefile nếu chưa có.
@@ -30,7 +31,7 @@
 
 **Việc tiếp theo (gợi ý thứ tự, hỏi người dùng trước khi bắt đầu)**
 1. Branch protection `main` (bắt PR + CI xanh) – chưa bật.
-2. SigNoz (`compose.observability.yml`: ClickHouse + OTel Collector, `mem_limit`, TTL 7 ngày, UI bind IP Tailscale) + `libs/platform-starter`: log JSON ECS, `requestId` vào MDC, OTLP trace/metrics (ARCHITECTURE §5, ADR-0006).
+2. SigNoz (`compose.observability.yml`: ClickHouse + OTel Collector, `mem_limit`, TTL 7 ngày, UI qua `tailscale serve :8443`) – đã soạn trong PR, chờ dựng theo runbook + `libs/platform-starter`: log JSON ECS, `requestId` vào MDC, OTLP trace/metrics (ARCHITECTURE §5, ADR-0006).
 3. Gateway P0 còn lại: access log, JWT, CORS (§4.4). 4. Phân quyền dev: user `dev`, SigNoz role Viewer, `group:dev` (§7).
 
 **Kiểm tra nhanh trạng thái (rẻ, chạy trước khi đọc tài liệu)**
