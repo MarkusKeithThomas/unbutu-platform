@@ -14,8 +14,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       # Mỗi service 1 user + 1 database (xem postgres/init/01-create-service-databases.sh)
-      SERVICE_DATABASES: catalog
+      SERVICE_DATABASES: catalog identity
       CATALOG_DB_PASSWORD: catalog
+      IDENTITY_DB_PASSWORD: identity
     volumes:
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
@@ -51,6 +52,31 @@ services:
       retries: 20
     mem_limit: 512m
 
+  identity-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: identity-service
+    image: identity-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/identity_db
+      DB_USERNAME: identity
+      DB_PASSWORD: identity
+      IDENTITY_JWT_ALLOW_EPHEMERAL_KEY: "true"   # local: key RSA tạm (prod: JWT_PRIVATE_KEY từ AWS SM)
+      IDENTITY_REFRESH_COOKIE_SECURE: "false"    # http://localhost
+    ports:
+      - "127.0.0.1:8081:8080"   # port cố định của identity
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
   api-gateway:
     build:
       context: ..
@@ -61,6 +87,7 @@ services:
     environment:
       # `make ide s=catalog-service` đặt biến này = http://host.docker.internal:8082 (catalog chạy trong IntelliJ)
       CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8080}
+      IDENTITY_SERVICE_URL: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # container gọi ra máy Mac
     ports:

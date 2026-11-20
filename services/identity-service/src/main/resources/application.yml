@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: identity-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/identity_db}
+    username: ${DB_USERNAME:identity}
+    password: ${DB_PASSWORD:identity}
+  mvc:
+    problemdetails:
+      enabled: true   # lỗi validation/404… → RFC 9457 Problem Details
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+identity:
+  jwt:
+    issuer: ${JWT_ISSUER:unbutu-identity}
+    access-token-ttl: 15m
+    # Private key RSA (PEM PKCS#8). Prod: AWS Secrets Manager (ADR-0004). Không có → chỉ local/test được tự sinh key tạm.
+    private-key: ${JWT_PRIVATE_KEY:}
+    key-id: ${JWT_KEY_ID:identity-1}
+    allow-ephemeral-key: false
+  refresh:
+    ttl: 7d
+    cookie-name: refresh_token
+    cookie-path: /api/identity
+    cookie-secure: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

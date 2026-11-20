@@ -13,12 +13,18 @@ spring:
               uri: ${services.catalog.url}
               predicates:
                 - Path=/api/catalog/**
+            - id: identity
+              uri: ${services.identity.url}
+              predicates:
+                - Path=/api/identity/**
 
 # Địa chỉ các service phía sau. Mặc định: tên container trong Docker network.
 # Ghi đè bằng biến môi trường (vd. CATALOG_SERVICE_URL) hoặc profile local.
 services:
   catalog:
     url: ${CATALOG_SERVICE_URL:http://catalog-service:8080}
+  identity:
+    url: ${IDENTITY_SERVICE_URL:http://identity-service:8080}
 
 server:
   port: ${SERVER_PORT:8080}

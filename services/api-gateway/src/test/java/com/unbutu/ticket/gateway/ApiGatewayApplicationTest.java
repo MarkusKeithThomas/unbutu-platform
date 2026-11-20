@@ -16,6 +16,6 @@ class ApiGatewayApplicationTest {
 
     @Test
     void catalogRouteIsConfigured() {
-        assertThat(routes.getRoutes().map(r -> r.getId()).collectList().block()).containsExactly("catalog");
+        assertThat(routes.getRoutes().map(r -> r.getId()).collectList().block()).containsExactlyInAnyOrder("catalog", "identity");
     }
 }
