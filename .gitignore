@@ -22,3 +22,6 @@ node_modules/
 dist/
 .vercel/
 *.tsbuildinfo
+
+# Env test do tools/ci/compose-smoke.sh sinh tạm (CI)
+deploy/env/

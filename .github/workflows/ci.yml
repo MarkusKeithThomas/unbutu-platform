@@ -33,7 +33,7 @@ jobs:
   build:
     name: Build & test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -76,3 +76,10 @@ jobs:
       # UI: npm ci + tsc + vite build chạy trong Docker (không cần cài Node trên runner).
       - name: Build Docker image frontend
         run: docker build -t frontend:ci frontend
+
+      # CI xanh ⇒ deploy chạy được: chạy ĐÚNG deploy/compose.app.yml với các image :ci vừa build,
+      # env cùng tên biến với env-map prod, `up --wait` như deploy.sh (container unhealthy = fail),
+      # rồi gọi API thật qua gateway: catalog, UI, đăng ký → đăng nhập → refresh → /me.
+      # Bắt được lỗi mà build/test từng image không thấy (healthcheck sai, route gateway, cấu hình, Flyway…).
+      - name: Smoke test như deploy prod (compose.app.yml)
+        run: tools/ci/compose-smoke.sh
