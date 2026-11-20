@@ -76,6 +76,32 @@ services:
       <<: *otel-env
       OTEL_SERVICE_NAME: catalog-service
 
+  identity-service:
+    <<: *service
+    image: ${IDENTITY_SERVICE_IMAGE:?Thiếu IDENTITY_SERVICE_IMAGE trong images.env}
+    env_file:
+      - path: env/identity-service.env
+        format: raw
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: identity-service
+
+  # UI tĩnh (nginx). Không phải Java → không dùng otel-env; gateway route mọi path không phải /api/** vào đây.
+  frontend:
+    <<: *service
+    image: ${FRONTEND_IMAGE:?Thiếu FRONTEND_IMAGE trong images.env}
+    mem_limit: 64m
+    depends_on: {}
+    env_file:
+      - path: env/frontend.env
+        format: raw
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
   api-gateway:
     <<: *service
     image: ${API_GATEWAY_IMAGE:?Thiếu API_GATEWAY_IMAGE trong images.env}

@@ -1,5 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://unbutu.tail3c11f4.ts.net/api/:path*" }
-  ]
-}

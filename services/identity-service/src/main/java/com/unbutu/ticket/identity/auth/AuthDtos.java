@@ -20,7 +20,8 @@ final class AuthDtos {
             @Size(max = 30) String phone) {
     }
 
-    record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
+    /** rememberMe: ô "Ghi nhớ đăng nhập" (null = false). */
+    record LoginRequest(@NotBlank @Email String email, @NotBlank String password, Boolean rememberMe) {
     }
 
     record UserResponse(UUID id, String email, String fullName, String phone, List<String> roles,
