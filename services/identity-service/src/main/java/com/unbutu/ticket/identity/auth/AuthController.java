@@ -31,12 +31,12 @@ class AuthController {
     @PostMapping("/register")
     ResponseEntity<AuthDtos.TokenResponse> register(@Valid @RequestBody AuthDtos.RegisterRequest req) {
         User user = auth.register(req);
-        return session(user, HttpStatus.CREATED);
+        return session(user, true, HttpStatus.CREATED);
     }
 
     @PostMapping("/login")
     ResponseEntity<AuthDtos.TokenResponse> login(@Valid @RequestBody AuthDtos.LoginRequest req) {
-        return session(auth.authenticate(req.email(), req.password()), HttpStatus.OK);
+        return session(auth.authenticate(req.email(), req.password()), Boolean.TRUE.equals(req.rememberMe()), HttpStatus.OK);
     }
 
     /** Đổi refresh token (cookie) lấy access token mới; refresh token được xoay vòng. */
@@ -49,7 +49,7 @@ class AuthController {
             RefreshTokenService.Rotation rotation = refreshTokens.rotate(token);
             User user = users.findById(rotation.userId()).filter(User::isActive)
                     .orElseThrow(AuthException::invalidRefresh);
-            return tokenResponse(user, rotation.newToken(), HttpStatus.OK);
+            return tokenResponse(user, rotation.newToken(), rotation.persistent(), HttpStatus.OK);
         } catch (InvalidRefreshTokenException e) {
             throw AuthException.invalidRefresh();
         }
@@ -63,14 +63,15 @@ class AuthController {
         return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookies.clear().toString()).build();
     }
 
-    private ResponseEntity<AuthDtos.TokenResponse> session(User user, HttpStatus status) {
-        return tokenResponse(user, refreshTokens.issue(user.getId()), status);
+    private ResponseEntity<AuthDtos.TokenResponse> session(User user, boolean persistent, HttpStatus status) {
+        return tokenResponse(user, refreshTokens.issue(user.getId(), persistent), persistent, status);
     }
 
-    private ResponseEntity<AuthDtos.TokenResponse> tokenResponse(User user, String refreshToken, HttpStatus status) {
+    private ResponseEntity<AuthDtos.TokenResponse> tokenResponse(User user, String refreshToken, boolean persistent,
+                                                                 HttpStatus status) {
         AccessTokenService.AccessToken access = accessTokens.issue(user);
         return ResponseEntity.status(status)
-                .header(HttpHeaders.SET_COOKIE, cookies.create(refreshToken).toString())
+                .header(HttpHeaders.SET_COOKIE, cookies.create(refreshToken, persistent).toString())
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(new AuthDtos.TokenResponse(access.value(), "Bearer", access.expiresInSeconds(),
                         AuthDtos.UserResponse.from(user)));

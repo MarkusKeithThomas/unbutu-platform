@@ -72,3 +72,7 @@ jobs:
             docker build -f deploy/docker/service.Dockerfile --build-arg SERVICE="$svc" -t "$svc:ci" .
             echo "::endgroup::"
           done
+
+      # UI: npm ci + tsc + vite build chạy trong Docker (không cần cài Node trên runner).
+      - name: Build Docker image frontend
+        run: docker build -t frontend:ci frontend

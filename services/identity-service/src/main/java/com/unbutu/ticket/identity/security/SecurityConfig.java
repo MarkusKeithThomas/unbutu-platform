@@ -24,7 +24,7 @@ class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/identity/register", "/api/identity/login",
-                                "/api/identity/refresh", "/api/identity/logout").permitAll()
+                                "/api/identity/refresh", "/api/identity/logout", "/api/identity/providers").permitAll()
                         .requestMatchers(GoogleLoginSecurity.AUTHORIZATION_BASE + "/**",
                                 GoogleLoginSecurity.CALLBACK_BASE + "/**").permitAll()
                         .requestMatchers("/.well-known/jwks.json").permitAll()

@@ -4,8 +4,8 @@
 COMPOSE := docker compose -f deploy/compose.local.yml
 s ?=
 
-# Container hạ tầng (không phải service Java → không build jar).
-INFRA := postgres
+# Container không phải service Java (không build jar bằng Gradle): hạ tầng + frontend (Dockerfile riêng).
+INFRA := postgres frontend
 
 # Port cố định trên máy Mac – giống nhau dù service chạy trong container hay IntelliJ.
 PORT_api-gateway          := 8080

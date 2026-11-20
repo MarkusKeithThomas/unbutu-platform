@@ -32,6 +32,7 @@ CREATE TABLE refresh_tokens (
     user_id    UUID        NOT NULL REFERENCES users (id),
     family_id  UUID        NOT NULL,
     token_hash CHAR(64)    NOT NULL,
+    persistent BOOLEAN     NOT NULL,              -- "Ghi nhớ đăng nhập": cookie có Max-Age; false = cookie phiên trình duyệt
     expires_at TIMESTAMPTZ NOT NULL,
     revoked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL,

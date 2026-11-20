@@ -69,7 +69,7 @@ services:
       # Redirect URI khai báo ở Google Console: http://localhost:8080/api/identity/login/oauth2/code/google
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      UI_BASE_URL: ${UI_BASE_URL:-http://localhost:5173}
+      UI_BASE_URL: ${UI_BASE_URL:-http://localhost:8080}   # UI qua gateway; dùng `npm run dev` thì đặt http://localhost:5173
     ports:
       - "127.0.0.1:8081:8080"   # port cố định của identity
     depends_on:
@@ -82,6 +82,19 @@ services:
       retries: 20
     mem_limit: 512m
 
+  frontend:
+    build:
+      context: ../frontend
+    image: frontend:local
+    ports:
+      - "127.0.0.1:8090:8080"   # xem trực tiếp nginx (bình thường vào qua gateway http://localhost:8080)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 64m
+
   api-gateway:
     build:
       context: ..
@@ -93,6 +106,7 @@ services:
       # `make ide s=catalog-service` đặt biến này = http://host.docker.internal:8082 (catalog chạy trong IntelliJ)
       CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8080}
       IDENTITY_SERVICE_URL: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}
+      FRONTEND_SERVICE_URL: ${FRONTEND_SERVICE_URL:-http://frontend:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # container gọi ra máy Mac
     ports:

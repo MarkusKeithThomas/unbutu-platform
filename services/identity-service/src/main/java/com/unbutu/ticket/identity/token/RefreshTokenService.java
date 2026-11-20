@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RefreshTokenService {
 
     /** Kết quả xoay vòng: user nào + token mới (giá trị gốc, chỉ để đặt vào cookie). */
-    public record Rotation(UUID userId, String newToken) {
+    public record Rotation(UUID userId, String newToken, boolean persistent) {
     }
 
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -34,10 +34,10 @@ public class RefreshTokenService {
     private final RefreshProperties props;
     private final Clock clock;
 
-    /** Phiên đăng nhập mới (family mới). */
+    /** Phiên đăng nhập mới (family mới). {@code persistent}: "Ghi nhớ đăng nhập" – giữ nguyên qua các lần xoay vòng. */
     @Transactional
-    public String issue(UUID userId) {
-        return issueInFamily(userId, UUID.randomUUID(), clock.instant());
+    public String issue(UUID userId, boolean persistent) {
+        return issueInFamily(userId, UUID.randomUUID(), persistent, clock.instant());
     }
 
     @Transactional(noRollbackFor = InvalidRefreshTokenException.class)
@@ -56,8 +56,8 @@ public class RefreshTokenService {
             throw new InvalidRefreshTokenException("refresh token expired");
         }
         current.revoke(now);
-        String next = issueInFamily(current.getUserId(), current.getFamilyId(), now);
-        return new Rotation(current.getUserId(), next);
+        String next = issueInFamily(current.getUserId(), current.getFamilyId(), current.isPersistent(), now);
+        return new Rotation(current.getUserId(), next, current.isPersistent());
     }
 
     /** Đăng xuất phiên hiện tại (cả family). Token lạ/hết hạn: bỏ qua – logout luôn thành công. */
@@ -72,11 +72,11 @@ public class RefreshTokenService {
         tokens.revokeAllOfUser(userId, clock.instant());
     }
 
-    private String issueInFamily(UUID userId, UUID familyId, Instant now) {
+    private String issueInFamily(UUID userId, UUID familyId, boolean persistent, Instant now) {
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        tokens.save(new RefreshToken(userId, familyId, hash(raw), now.plus(props.ttl()), now));
+        tokens.save(new RefreshToken(userId, familyId, hash(raw), persistent, now.plus(props.ttl()), now));
         return raw;
     }
 

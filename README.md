@@ -27,6 +27,11 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | GET | `/api/catalog/ping` | Kiểm tra sống (smoke test của deploy) |
 | GET | `/api/catalog/events` | Danh sách sự kiện (prod rỗng; local có dữ liệu mẫu) |
 | GET | `/api/catalog/events/{id}` | Chi tiết sự kiện |
+| POST | `/api/identity/register` · `/login` · `/refresh` · `/logout` | Đăng ký / đăng nhập email+mật khẩu; refresh token trong cookie HttpOnly |
+| GET | `/api/identity/me` | Hồ sơ (cần `Authorization: Bearer`) |
+| GET | `/api/identity/providers` | Cách đăng nhập đang bật (`google: true/false`) |
+| GET | `/api/identity/oauth2/authorization/google` | Bắt đầu login Google (redirect) |
+| GET | `/`, `/login`, `/register` | UI (container `frontend`, gateway route mọi path không phải `/api/**`) |
 
 ## Công nghệ
 Java 21 · Spring Boot 4.1 · Spring Cloud Gateway 5 (WebFlux) · PostgreSQL 17 + Flyway · Gradle Kotlin DSL ·
@@ -56,9 +61,10 @@ Port cố định trên máy, giống nhau dù chạy trong container hay Intell
 | Service | Port | | Service | Port |
 |---|---|---|---|---|
 | api-gateway | 8080 | | booking-service | 8084 *(chưa có)* |
-| identity-service | 8081 *(chưa có)* | | payment-service | 8085 *(chưa có)* |
+| identity-service | 8081 | | payment-service | 8085 *(chưa có)* |
 | catalog-service | 8082 | | notification-service | 8086 *(chưa có)* |
 | inventory-service | 8083 *(chưa có)* | | postgres | 5432 |
+| frontend (nginx) | 8090 | | | |
 
 ### Lệnh `make` (gõ `make` để xem danh sách)
 ```bash

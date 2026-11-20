@@ -65,6 +65,13 @@ jobs:
             var="$(echo "$svc" | tr 'a-z-' 'A-Z_')_IMAGE"                                  # catalog-service → CATALOG_SERVICE_IMAGE
             echo "$var=$digest_ref" >> images.env
           done
+          # UI (Dockerfile riêng, context frontend/)
+          image="ghcr.io/$owner/frontend"
+          echo "::group::frontend"
+          docker build -t "$image:$SHA" frontend
+          docker push "$image:$SHA"
+          echo "FRONTEND_IMAGE=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$SHA")" >> images.env
+          echo "::endgroup::"
           echo "APP_VERSION=${SHA::7}" >> images.env
           echo "GIT_SHA=$SHA" >> images.env   # deploy.sh tải compose.app.yml đúng commit này
           {

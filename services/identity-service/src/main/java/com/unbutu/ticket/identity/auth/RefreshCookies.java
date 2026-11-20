@@ -21,8 +21,10 @@ public class RefreshCookies {
         return props.cookieName();
     }
 
-    public ResponseCookie create(String token) {
-        return base(token).maxAge(props.ttl()).build();
+    /** persistent=false → cookie phiên (không Max-Age): đóng trình duyệt là mất; token phía server vẫn hết hạn sau ttl. */
+    public ResponseCookie create(String token, boolean persistent) {
+        ResponseCookie.ResponseCookieBuilder b = base(token);
+        return (persistent ? b.maxAge(props.ttl()) : b).build();
     }
 
     public ResponseCookie clear() {
