@@ -21,3 +21,4 @@ out/
 node_modules/
 dist/
 .vercel/
+*.tsbuildinfo

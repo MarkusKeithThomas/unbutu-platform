@@ -38,7 +38,7 @@ class GoogleLoginHandlers implements AuthenticationSuccessHandler, Authenticatio
         try {
             User user = googleLogin.login(new GoogleLoginService.GoogleProfile(oidc.getSubject(), oidc.getEmail(),
                     Boolean.TRUE.equals(oidc.getEmailVerified()), oidc.getFullName()));
-            response.addHeader(HttpHeaders.SET_COOKIE, cookies.create(refreshTokens.issue(user.getId())).toString());
+            response.addHeader(HttpHeaders.SET_COOKIE, cookies.create(refreshTokens.issue(user.getId(), true), true).toString());
             response.sendRedirect(ui.baseUrl() + "/auth/callback");
         } catch (AuthException e) {
             response.sendRedirect(ui.baseUrl() + "/login?error=" + e.getCode());

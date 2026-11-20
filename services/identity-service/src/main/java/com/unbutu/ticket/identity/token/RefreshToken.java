@@ -28,6 +28,9 @@ class RefreshToken {
     @Column(name = "token_hash", nullable = false)
     private String tokenHash;
 
+    @Column(nullable = false)
+    private boolean persistent;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
@@ -37,11 +40,12 @@ class RefreshToken {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    RefreshToken(UUID userId, UUID familyId, String tokenHash, Instant expiresAt, Instant now) {
+    RefreshToken(UUID userId, UUID familyId, String tokenHash, boolean persistent, Instant expiresAt, Instant now) {
         this.id = UUID.randomUUID();
         this.userId = userId;
         this.familyId = familyId;
         this.tokenHash = tokenHash;
+        this.persistent = persistent;
         this.expiresAt = expiresAt;
         this.createdAt = now;
     }
