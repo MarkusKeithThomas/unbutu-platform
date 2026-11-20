@@ -6,3 +6,5 @@ server:
 services:
   catalog:
     url: http://localhost:8082
+  identity:
+    url: http://localhost:8081

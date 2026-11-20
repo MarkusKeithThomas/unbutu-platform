@@ -1,0 +1,16 @@
+# Profile "local": chạy service trực tiếp trong IntelliJ (SPRING_PROFILES_ACTIVE=local).
+# Bảng port: README.md → "Chạy local".
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/identity_db
+    username: identity
+    password: identity
+
+identity:
+  jwt:
+    allow-ephemeral-key: true   # local: tự sinh key RSA tạm mỗi lần khởi động (token cũ hết hiệu lực khi restart)
+  refresh:
+    cookie-secure: false        # http://localhost
