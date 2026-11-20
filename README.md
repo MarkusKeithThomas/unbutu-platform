@@ -27,7 +27,6 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | GET | `/api/catalog/ping` | Kiểm tra sống (smoke test của deploy) |
 | GET | `/api/catalog/events` | Danh sách sự kiện (prod rỗng; local có dữ liệu mẫu) |
 | GET | `/api/catalog/events/{id}` | Chi tiết sự kiện |
-| GET | `/api/catalog-service/bich-phuong` | API demo |
 
 ## Công nghệ
 Java 21 · Spring Boot 4.1 · Spring Cloud Gateway 5 (WebFlux) · PostgreSQL 17 + Flyway · Gradle Kotlin DSL ·
