@@ -10,6 +10,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
@@ -34,7 +35,7 @@ class JwtKeyConfig {
     @Bean
     RSAKey signingKey(JwtProperties props) throws GeneralSecurityException, JOSEException {
         if (props.privateKey() != null && !props.privateKey().isBlank()) {
-            RSAPrivateCrtKey privateKey = parsePkcs8(props.privateKey());
+            RSAPrivateCrtKey privateKey = parsePrivateKey(props.privateKey());
             KeyFactory kf = KeyFactory.getInstance("RSA");
             RSAPublicKey publicKey = (RSAPublicKey) kf.generatePublic(
                     new RSAPublicKeySpec(privateKey.getModulus(), privateKey.getPublicExponent()));
@@ -61,11 +62,47 @@ class JwtKeyConfig {
         return decoder;
     }
 
-    private static RSAPrivateCrtKey parsePkcs8(String pem) throws GeneralSecurityException {
-        String base64 = pem.replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s", "");
+    /**
+     * Nhận private key RSA dạng base64 (có hoặc không có dòng BEGIN/END), DER theo:
+     * <ul>
+     *   <li>PKCS#8 ({@code PrivateKeyInfo}) – {@code openssl pkcs8 -topk8 -nocrypt -outform DER}</li>
+     *   <li>PKCS#1 ({@code RSAPrivateKey}) – {@code openssl genpkey … -outform DER} (OpenSSL 3+) ghi dạng này</li>
+     * </ul>
+     * PKCS#1 được bọc thành PKCS#8 trước khi nạp (Java chỉ đọc PKCS#8).
+     */
+    static RSAPrivateCrtKey parsePrivateKey(String encoded) throws GeneralSecurityException {
+        String base64 = encoded.replaceAll("-----(BEGIN|END) [A-Z ]*PRIVATE KEY-----", "").replaceAll("\\s", "");
         byte[] der = Base64.getDecoder().decode(base64);
-        return (RSAPrivateCrtKey) KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der));
+        KeyFactory kf = KeyFactory.getInstance("RSA");
+        try {
+            return (RSAPrivateCrtKey) kf.generatePrivate(new PKCS8EncodedKeySpec(der));
+        } catch (InvalidKeySpecException notPkcs8) {
+            return (RSAPrivateCrtKey) kf.generatePrivate(new PKCS8EncodedKeySpec(wrapPkcs1(der)));
+        }
+    }
+
+    /** PrivateKeyInfo ::= SEQUENCE { INTEGER 0, AlgorithmIdentifier rsaEncryption NULL, OCTET STRING pkcs1 } */
+    private static byte[] wrapPkcs1(byte[] pkcs1) {
+        byte[] version = {0x02, 0x01, 0x00};
+        byte[] rsaAlgorithm = {0x30, 0x0d, 0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00};
+        byte[] octet = derTlv(0x04, pkcs1);
+        byte[] body = new byte[version.length + rsaAlgorithm.length + octet.length];
+        System.arraycopy(version, 0, body, 0, version.length);
+        System.arraycopy(rsaAlgorithm, 0, body, version.length, rsaAlgorithm.length);
+        System.arraycopy(octet, 0, body, version.length + rsaAlgorithm.length, octet.length);
+        return derTlv(0x30, body);
+    }
+
+    private static byte[] derTlv(int tag, byte[] value) {
+        int len = value.length;
+        byte[] lenBytes = len < 0x80 ? new byte[] {(byte) len}
+                : len < 0x100 ? new byte[] {(byte) 0x81, (byte) len}
+                : len < 0x10000 ? new byte[] {(byte) 0x82, (byte) (len >> 8), (byte) len}
+                : new byte[] {(byte) 0x83, (byte) (len >> 16), (byte) (len >> 8), (byte) len};
+        byte[] out = new byte[1 + lenBytes.length + len];
+        out[0] = (byte) tag;
+        System.arraycopy(lenBytes, 0, out, 1, lenBytes.length);
+        System.arraycopy(value, 0, out, 1 + lenBytes.length, len);
+        return out;
     }
 }
