@@ -89,7 +89,8 @@ services:
     ports:
       - "127.0.0.1:8090:8080"   # xem trực tiếp nginx (bình thường vào qua gateway http://localhost:8080)
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      # 127.0.0.1, KHÔNG dùng localhost: trong image Alpine localhost → ::1 (IPv6), nginx chỉ nghe IPv4 → luôn unhealthy
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 5s
       timeout: 3s
       retries: 20
