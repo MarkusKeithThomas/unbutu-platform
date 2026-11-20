@@ -17,7 +17,7 @@ identity:
   jwt:
     issuer: ${JWT_ISSUER:unbutu-identity}
     access-token-ttl: 15m
-    # Private key RSA (PEM PKCS#8). Prod: AWS Secrets Manager (ADR-0004). Không có → chỉ local/test được tự sinh key tạm.
+    # Private key RSA: base64 DER PKCS#8 hoặc PKCS#1 (có/không dòng BEGIN). Prod: AWS Secrets Manager (ADR-0004). Không có → chỉ local/test được tự sinh key tạm.
     private-key: ${JWT_PRIVATE_KEY:}
     key-id: ${JWT_KEY_ID:identity-1}
     allow-ephemeral-key: false
