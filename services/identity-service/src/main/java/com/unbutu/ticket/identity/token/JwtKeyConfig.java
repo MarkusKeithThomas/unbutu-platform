@@ -52,11 +52,12 @@ class JwtKeyConfig {
         return new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(signingKey)));
     }
 
-    /** identity tự verify access token của chính nó (cho /api/identity/me). */
+    /** identity tự verify access token của chính nó (cho /api/identity/me). Chỉ nhận token_use=access. */
     @Bean
     JwtDecoder jwtDecoder(RSAKey signingKey, JwtProperties props) throws JOSEException {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(signingKey.toRSAPublicKey()).build();
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(props.issuer())));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(props.issuer()), TokenUse.validator(TokenUse.ACCESS)));
         return decoder;
     }
 

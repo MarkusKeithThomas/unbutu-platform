@@ -65,6 +65,11 @@ services:
       DB_PASSWORD: identity
       IDENTITY_JWT_ALLOW_EPHEMERAL_KEY: "true"   # local: key RSA tạm (prod: JWT_PRIVATE_KEY từ AWS SM)
       IDENTITY_REFRESH_COOKIE_SECURE: "false"    # http://localhost
+      # Login Google (tuỳ chọn): export trong shell trước `make up` – KHÔNG ghi value vào file này.
+      # Redirect URI khai báo ở Google Console: http://localhost:8080/api/identity/login/oauth2/code/google
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      UI_BASE_URL: ${UI_BASE_URL:-http://localhost:5173}
     ports:
       - "127.0.0.1:8081:8080"   # port cố định của identity
     depends_on:

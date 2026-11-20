@@ -31,6 +31,7 @@ public class AccessTokenService {
                 .id(UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiresAt(now.plus(props.accessTokenTtl()))
+                .claim(TokenUse.CLAIM, TokenUse.ACCESS)
                 .claim("email", user.getEmail())
                 .claim("roles", user.roleList())
                 .build();
