@@ -415,6 +415,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] Cấu hình + secret prod: repo private `pro-ticket-workload` (Terraform/GitOps, OIDC) giữ đường dẫn, value chỉ trong AWS Secrets Manager; `deploy.sh` lấy lúc deploy (ADR-0004).
 - [x] Spring Boot 4.1.2, Spring Cloud 2025.1.4 (Gateway 5.0.4), PostgreSQL 17.
 - [x] CD: deploy prod sau khi duyệt, qua Tailscale OIDC (`tag:ci`) + SSH forced command (ADR-0005).
+- [x] **Phân quyền API ghi tại service** (2026-11-21): catalog tự verify access token (RS256, JWKS nội bộ `http://identity-service:8080/.well-known/jwks.json`, `iss`, `token_use=access`), role lấy từ claim `roles`. Đường dẫn: đọc công khai `/api/catalog/**` (GET), ghi chỉ `/api/catalog/admin/**` (ADMIN). Gateway verify JWT (§4.4 P0) làm sau – service vẫn giữ kiểm tra (defense in depth).
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:

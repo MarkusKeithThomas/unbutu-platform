@@ -32,6 +32,35 @@ public class Event {
 
     private String description;
 
+    private String venue;
+
+    @Column(name = "starts_at")
+    private Instant startsAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    static Event create(EventRequest req, Instant now) {
+        Event e = new Event();
+        e.id = UUID.randomUUID();
+        e.createdAt = now;
+        e.apply(req, now);
+        return e;
+    }
+
+    void apply(EventRequest req, Instant now) {
+        this.title = req.title().strip();
+        this.type = req.type();
+        this.description = blankToNull(req.description());
+        this.venue = blankToNull(req.venue());
+        this.startsAt = req.startsAt();
+        this.updatedAt = now;
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.strip();
+    }
 }

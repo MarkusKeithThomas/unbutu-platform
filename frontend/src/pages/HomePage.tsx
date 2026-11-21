@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { AuthLayout } from '../AuthLayout';
 
@@ -20,7 +20,11 @@ export function HomePage() {
         <h2 className="display">{via === 'register' ? 'Tạo tài khoản thành công' : 'Đăng nhập thành công'}</h2>
         <p>{via === 'google' ? 'Bạn đã đăng nhập bằng tài khoản Google.' : `Chào mừng, ${name}.`}</p>
         <p>{state.user.email}</p>
-        <a className="cta" aria-disabled="true" href="#" onClick={(e) => e.preventDefault()}>Trang mua vé – sắp có</a>
+        {state.user.roles.includes('ADMIN') ? (
+          <Link className="cta" to="/admin/ticket-types">Vào trang quản trị</Link>
+        ) : (
+          <a className="cta" aria-disabled="true" href="#" onClick={(e) => e.preventDefault()}>Trang mua vé – sắp có</a>
+        )}
         <button type="button" className="btn-link" onClick={() => logout().then(() => navigate('/login', { replace: true }))}>
           Đăng xuất
         </button>

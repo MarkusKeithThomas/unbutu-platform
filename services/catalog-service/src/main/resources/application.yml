@@ -5,10 +5,19 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/catalog_db}
     username: ${DB_USERNAME:catalog}
     password: ${DB_PASSWORD:catalog}
+  mvc:
+    problemdetails:
+      enabled: true   # lỗi validation/404… → RFC 9457 Problem Details
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+
+catalog:
+  jwt:
+    # Public key của identity-service (gọi nội bộ, cache trong bộ nhớ). Token phải có iss khớp + token_use=access.
+    jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
+    issuer: ${JWT_ISSUER:unbutu-identity}
 
 server:
   port: ${SERVER_PORT:8080}

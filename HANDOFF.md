@@ -1,16 +1,19 @@
 # HANDOFF – việc cần làm ngay
 
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
-> Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-16.
-
-## Làm ngay
-1. **OBS-7 – đo CPU ClickHouse** từ **16:56 UTC 2026-11-16** trở đi (stack tạo lại lúc ~16:26, bản `18cf1f1`):
-   `ssh unbutu 'for i in 1 2 3; do docker stats --no-stream --format "{{.CPUPerc}}" signoz-telemetrystore-clickhouse-0-0; done'`
-   + đếm part mới của `system` / 30 phút trong `system.part_log`. Đạt (< 5%) hoặc ghi mức đo + lý do → đóng OBS-7.
-2. Sau đó gợi ý người dùng chọn việc tiếp theo: **OBS-5** (dashboard RED + SLO + alert Telegram) hoặc Gateway P0 còn lại (JWT, CORS).
+> Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-21.
 
 ## Đang chờ người dùng
-- Merge PR docs `docs/obs-3-4-done`.
+- Review + merge **PR #28** (CRUD sự kiện + hạng vé, màn `/admin/*`) → Approve deploy.
+
+## Làm ngay sau khi deploy
+1. **CAT-1** (`docs/tasks/catalog.md`): cấp ADMIN cho tài khoản quản trị trên prod
+   (`UPDATE users SET roles='CUSTOMER,ADMIN' WHERE email='…'` trong `identity_db`) → đăng nhập lại → thử `/admin/ticket-types`.
+2. Gợi ý việc tiếp: inventory-service (cột "Đã bán", CAT-2) hoặc Gateway P0 (JWT tại biên, CORS); OBS-7 (đo CPU ClickHouse) vẫn mở.
+
+## Ghi chú local
+- DB local cũ: đã sửa checksum V1 của `catalog_db` + tạo tay user/DB `identity`. Gặp lại lỗi Flyway/DB thiếu → `make clean` (xoá hết dữ liệu local).
+- User test local: `admin@local.test` / `Password123` (đã là ADMIN).
 
 ## Kiểm tra nhanh đầu phiên
 ```bash

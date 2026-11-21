@@ -20,11 +20,16 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   const res = await fetch(path, {
     ...init,
     credentials: 'same-origin',
-    headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+    headers: {
+      Accept: 'application/json',
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init.headers,
+    },
   });
   if (!res.ok) {
     let code: string | undefined;
@@ -51,6 +56,51 @@ export const api = {
   logout: () => request<void>('/api/identity/logout', { method: 'POST' }),
 };
 
+// ---- catalog: sự kiện + hạng vé ----
+
+export type EventType = 'MOVIE' | 'CONCERT' | 'SPORT' | 'THEATER';
+export type CatalogEvent = {
+  id: string;
+  title: string;
+  type: EventType;
+  description: string | null;
+  venue: string | null;
+  startsAt: string | null; // ISO-8601 (UTC)
+  updatedAt: string;
+};
+export type EventInput = Omit<CatalogEvent, 'id' | 'updatedAt'>;
+
+export type TicketStatus = 'DRAFT' | 'ON_SALE' | 'PAUSED';
+export type TicketType = {
+  id: string;
+  code: string;
+  eventId: string;
+  eventTitle: string;
+  name: string;
+  price: number; // VND
+  totalQuantity: number;
+  status: TicketStatus;
+  /** false: đã từng mở bán → chỉ tạm dừng được, không xoá hẳn. */
+  deletable: boolean;
+  updatedAt: string;
+};
+export type TicketTypeInput = Pick<TicketType, 'eventId' | 'name' | 'price' | 'totalQuantity' | 'status'>;
+
+const json = (method: string, body?: unknown): RequestInit => ({ method, body: body === undefined ? undefined : JSON.stringify(body) });
+
+export const catalog = {
+  events: () => request<CatalogEvent[]>('/api/catalog/events'),
+  createEvent: (t: string, e: EventInput) => request<CatalogEvent>('/api/catalog/admin/events', json('POST', e), t),
+  updateEvent: (t: string, id: string, e: EventInput) => request<CatalogEvent>(`/api/catalog/admin/events/${id}`, json('PUT', e), t),
+  deleteEvent: (t: string, id: string) => request<void>(`/api/catalog/admin/events/${id}`, json('DELETE'), t),
+
+  ticketTypes: (t: string) => request<TicketType[]>('/api/catalog/admin/ticket-types', {}, t),
+  createTicketType: (t: string, x: TicketTypeInput) => request<TicketType>('/api/catalog/admin/ticket-types', json('POST', x), t),
+  updateTicketType: (t: string, id: string, x: TicketTypeInput) =>
+    request<TicketType>(`/api/catalog/admin/ticket-types/${id}`, json('PUT', x), t),
+  deleteTicketType: (t: string, id: string) => request<void>(`/api/catalog/admin/ticket-types/${id}`, json('DELETE'), t),
+};
+
 /** Bắt đầu login Google: chuyển cả trang sang backend → Google → quay về /auth/callback. */
 export const GOOGLE_LOGIN_URL = '/api/identity/oauth2/authorization/google';
 
@@ -63,7 +113,15 @@ export function errorMessage(e: unknown): string {
       case 'GOOGLE_EMAIL_NOT_VERIFIED': return 'Email Google của bạn chưa được xác minh.';
       case 'ACCOUNT_DISABLED': return 'Tài khoản đã bị khoá.';
       case 'GOOGLE_LOGIN_FAILED': return 'Đăng nhập Google không thành công. Vui lòng thử lại.';
+      case 'TICKET_TYPE_NAME_TAKEN': return 'Sự kiện này đã có hạng vé cùng tên.';
+      case 'TICKET_TYPE_ALREADY_PUBLISHED': return e.message;
+      case 'EVENT_HAS_TICKET_TYPES': return 'Sự kiện còn hạng vé – hãy xoá các hạng vé trước.';
+      case 'EVENT_NOT_FOUND': return 'Sự kiện không còn tồn tại. Hãy tải lại trang.';
+      case 'TICKET_TYPE_NOT_FOUND': return 'Hạng vé không còn tồn tại. Hãy tải lại trang.';
+      case 'CONFLICT': return 'Dữ liệu vừa bị thay đổi, hãy tải lại trang.';
     }
+    if (e.status === 401) return 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.';
+    if (e.status === 403) return 'Bạn không có quyền thực hiện thao tác này.';
     if (e.status === 400) return 'Thông tin chưa hợp lệ, vui lòng kiểm tra lại.';
     if (e.status >= 500) return 'Hệ thống đang bận, vui lòng thử lại sau.';
     return e.message;
