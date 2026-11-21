@@ -47,6 +47,7 @@ class StateCookieAuthorizationRequestRepository implements AuthorizationRequestR
     private final JwtEncoder encoder;
     private final NimbusJwtDecoder decoder;
     private final JwtProperties jwtProps;
+    private final String keyId;
     private final RefreshProperties cookieProps;
     private final Clock clock;
 
@@ -54,6 +55,7 @@ class StateCookieAuthorizationRequestRepository implements AuthorizationRequestR
                                               RefreshProperties cookieProps, Clock clock) throws JOSEException {
         this.encoder = encoder;
         this.jwtProps = jwtProps;
+        this.keyId = signingKey.getKeyID();
         this.cookieProps = cookieProps;
         this.clock = clock;
         this.decoder = NimbusJwtDecoder.withPublicKey(signingKey.toRSAPublicKey()).build();
@@ -96,7 +98,7 @@ class StateCookieAuthorizationRequestRepository implements AuthorizationRequestR
                 .claim("attributes", stringMap(req.getAttributes()))
                 .claim("authorization_request_uri", req.getAuthorizationRequestUri())
                 .build();
-        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(jwtProps.keyId()).build();
+        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(keyId).build();
         String jwt = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie(jwt, TTL).toString());
     }

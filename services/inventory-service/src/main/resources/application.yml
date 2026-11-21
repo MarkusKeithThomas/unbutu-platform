@@ -20,10 +20,17 @@ spring:
       auto-offset-reset: earliest   # lần đầu: đọc topic từ đầu để dựng toàn bộ tồn kho
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        # Static membership (KIP-345), như booking: group.instance.id cố định (@KafkaListener) → deploy/restart
+        # không rebalance. Rời nhóm > session.timeout mới bị coi là chết → chia lại partition.
+        session.timeout.ms: 60000
     listener:
       ack-mode: record              # xử lý xong từng message mới commit offset
 
 inventory:
+  kafka:
+    # Mỗi instance chạy cùng lúc một id khác (inventory-1..N); trùng id → broker fence bản cũ. Prod: 1 container.
+    instance-id: ${KAFKA_GROUP_INSTANCE_ID:inventory-1}
   hold:
     ttl: 10m                        # giữ vé 10′ (booking truyền vào, đây là trần)
     sweep-interval: 1s              # quét hold hết hạn → trả vé

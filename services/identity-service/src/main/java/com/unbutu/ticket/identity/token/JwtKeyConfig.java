@@ -44,8 +44,13 @@ class JwtKeyConfig {
         if (!props.allowEphemeralKey()) {
             throw new IllegalStateException("Thiếu identity.jwt.private-key (JWT_PRIVATE_KEY) – bắt buộc ngoài local/test");
         }
-        log.warn("Không có JWT_PRIVATE_KEY → tự sinh key RSA tạm (chỉ dùng local/test, token mất hiệu lực khi restart)");
-        return new RSAKeyGenerator(2048).keyID(props.keyId()).keyUse(KeyUse.SIGNATURE).generate();
+        // kid = keyId + thumbprint (RFC 7638): mỗi lần sinh key mới là một kid mới. Giữ kid cũ cho key khác → service
+        // verify (gateway, booking…) tin JWKS đang cache, báo "Invalid signature" cho token mới tới khi restart.
+        // kid lạ → chúng tự tải lại JWKS. (Prod: key cố định từ secret, kid cấu hình – không đổi qua các lần deploy.)
+        RSAKey generated = new RSAKeyGenerator(2048).keyUse(KeyUse.SIGNATURE).generate();
+        String kid = props.keyId() + "-" + generated.computeThumbprint().toString().substring(0, 8);
+        log.warn("Không có JWT_PRIVATE_KEY → tự sinh key RSA tạm kid={} (chỉ dùng local/test, token cũ mất hiệu lực khi restart)", kid);
+        return new RSAKey.Builder(generated).keyID(kid).build();
     }
 
     @Bean
