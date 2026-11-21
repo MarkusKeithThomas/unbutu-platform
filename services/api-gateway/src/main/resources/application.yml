@@ -17,6 +17,14 @@ spring:
               uri: ${services.identity.url}
               predicates:
                 - Path=/api/identity/**
+            - id: inventory
+              uri: ${services.inventory.url}
+              predicates:
+                - Path=/api/inventory/**
+            - id: booking
+              uri: ${services.booking.url}
+              predicates:
+                - Path=/api/bookings,/api/bookings/**
             # UI (SPA, nginx): mọi path còn lại. order lớn → xét SAU các route /api/** ở trên.
             - id: frontend
               uri: ${services.frontend.url}
@@ -31,6 +39,10 @@ services:
     url: ${CATALOG_SERVICE_URL:http://catalog-service:8080}
   identity:
     url: ${IDENTITY_SERVICE_URL:http://identity-service:8080}
+  inventory:
+    url: ${INVENTORY_SERVICE_URL:http://inventory-service:8080}
+  booking:
+    url: ${BOOKING_SERVICE_URL:http://booking-service:8080}
   frontend:
     url: ${FRONTEND_SERVICE_URL:http://frontend:8080}
 

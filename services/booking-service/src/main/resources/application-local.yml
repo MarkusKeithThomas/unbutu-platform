@@ -1,0 +1,16 @@
+# Profile "local": chạy trong IntelliJ (SPRING_PROFILES_ACTIVE=local). Bảng port: README.md.
+server:
+  port: 8084
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/booking_db
+    username: booking
+    password: booking
+  kafka:
+    bootstrap-servers: localhost:19092
+
+booking:
+  jwt:
+    jwk-set-uri: http://localhost:8081/.well-known/jwks.json
+  inventory-url: http://localhost:8083

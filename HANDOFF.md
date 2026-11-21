@@ -3,25 +3,25 @@
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-21.
 
-## Đang chờ người dùng
-- Review + merge PR **ORD-1a** (Redpanda + Outbox catalog, nhánh `feat/ord-1a-redpanda-outbox`) → Approve deploy.
-  Deploy này **thêm container `redpanda` lên prod** (mem_limit 1,25 GB, đo ~100 MB). Sau deploy kiểm tra:
-  `ssh unbutu 'docker exec prod-redpanda-1 rpk topic list; docker logs prod-catalog-service-1 2>&1 | grep Outbox: | tail -2'`
-  → phải thấy `catalog.event.v1` + "đã gửi N event" (backfill dữ liệu prod).
-- Đổi mật khẩu: người dùng nói `hthuongtn2905@gmail.com` – prod KHÔNG có; chỉ có `chthuongtn2905@gmail.com` → chờ xác nhận đúng email.
+## Đang chờ người dùng – ROLLOUT inventory + booking (đã gộp: unbutu-platform #33 + pro-ticket-workload #5)
+1. ✅ Secret AWS `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (Claude tạo, value ngẫu nhiên – người dùng sẽ đổi;
+   đổi thì đổi cả password user Postgres – runbook mục "rotate").
+2. ✅ pro-ticket-workload #5 đã merge + apply.
+3. ✅ DB `inventory_db`, `booking_db` đã tạo trên prod.
+4. **#33** draft → Ready → merge → Approve deploy → Claude kiểm prod.
+   Bài học #32: PR xếp chồng merge vào nhánh cũ sau khi PR dưới squash → mất khỏi main. Chỉ mở PR khi base là `main`.
 
 ## Làm tiếp
-1. **ORD-1b** (`docs/tasks/catalog.md`): Redis vào compose + inventory-service (consumer `catalog.event.v1`, A8b availability, reservations Lua, sổ cái Postgres).
-2. ORD-1c booking + UI bước 2 → rồi **PAY-1** (cổng giả lập, quyết định đã chốt). Mọi code: tự kiểm mở rộng 50k rps.
+- **PAY-1** – cổng giả lập (quyết định đã chốt trong `docs/tasks/catalog.md`). Mọi code: tự kiểm 50k rps; trước push chạy đủ như CI.
 
 ## Ghi chú local
-- Kafka local: `localhost:19092` (IntelliJ) / `redpanda:9092` (container). Xem topic: `docker exec ticket-local-redpanda-1 rpk topic describe catalog.event.v1 -p`
-  (`rpk topic consume` không có `-n` sẽ chờ mãi).
-- DB local cũ đã sửa tay (checksum V1 catalog, user/DB identity). Lỗi Flyway → `make clean`.
+- DB local cũ sửa tay (checksum V1 catalog; user/DB identity, inventory, booking tạo tay). Lỗi Flyway/DB → `make clean`.
+- Kafka `localhost:19092`, Redis `localhost:6379`, inventory `:8083`, booking `:8084`.
+- Kịch bản thử booking: `bash <scratchpad>/booking-e2e.sh` (mất khi reboot – nội dung trong PR ORD-1c).
 - User test local: `admin@local.test` / `Password123` (ADMIN).
 
 ## Kiểm tra nhanh đầu phiên
 ```bash
-gh pr list; gh run list -L 5
+gh pr list; gh run list -L 5; gh pr list -R MarkusKeithThomas/pro-ticket-workload
 ssh -o BatchMode=yes unbutu 'sudo tail -2 /opt/unbutu-platform/prod/deploy-history.log; docker ps --format "{{.Names}} {{.Status}}"'
 ```

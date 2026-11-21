@@ -14,7 +14,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       # Mỗi service 1 user + 1 database (xem postgres/init/01-create-service-databases.sh)
-      SERVICE_DATABASES: catalog identity
+      SERVICE_DATABASES: catalog identity inventory booking
       CATALOG_DB_PASSWORD: catalog
       IDENTITY_DB_PASSWORD: identity
     volumes:
@@ -53,6 +53,73 @@ services:
       timeout: 5s
       retries: 20
     mem_limit: 768m
+
+  redis:
+    image: redis:7.4.7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", "",
+              "--maxmemory", "192mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+
+  inventory-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: inventory-service
+    image: inventory-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/inventory_db
+      DB_USERNAME: inventory
+      DB_PASSWORD: inventory
+    ports:
+      - "127.0.0.1:8083:8080"   # port cố định của inventory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
+  booking-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: booking-service
+    image: booking-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/booking_db
+      DB_USERNAME: booking
+      DB_PASSWORD: booking
+      IDENTITY_JWKS_URI: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}/.well-known/jwks.json
+      INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL:-http://inventory-service:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8084:8080"   # port cố định của booking
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
 
   catalog-service:
     build:
@@ -137,6 +204,8 @@ services:
       # `make ide s=catalog-service` đặt biến này = http://host.docker.internal:8082 (catalog chạy trong IntelliJ)
       CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8080}
       IDENTITY_SERVICE_URL: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}
+      INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL:-http://inventory-service:8080}
+      BOOKING_SERVICE_URL: ${BOOKING_SERVICE_URL:-http://booking-service:8080}
       FRONTEND_SERVICE_URL: ${FRONTEND_SERVICE_URL:-http://frontend:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # container gọi ra máy Mac
@@ -152,3 +221,4 @@ services:
 volumes:
   pgdata:
   redpanda-data:
+  redis-data:

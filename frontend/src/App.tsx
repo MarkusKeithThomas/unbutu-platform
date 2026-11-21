@@ -1,16 +1,30 @@
 import type { ReactElement } from 'react';
-import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { setReturnTo } from './returnTo';
 import { EventsPage } from './admin/EventsPage';
 import { TicketTypesPage } from './admin/TicketTypesPage';
 import { useAuth } from './auth';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { CheckoutPage } from './shop/CheckoutPage';
 import { EventPage } from './shop/EventPage';
 import { EventsListPage } from './shop/EventsListPage';
 
 function Loading() {
   return <div className="center">Đang tải…</div>;
+}
+
+/** Cần đăng nhập; chưa → /login rồi quay lại đúng trang này. */
+function RequireAuth({ children }: { children: ReactElement }) {
+  const { state } = useAuth();
+  const here = useLocation().pathname;
+  if (state.status === 'loading') return <Loading />;
+  if (state.status !== 'authenticated') {
+    setReturnTo(here);
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 }
 
 /** Chỉ cho ADMIN (API catalog cũng kiểm tra lại – đây chỉ để không hiện màn không dùng được). */
@@ -47,6 +61,7 @@ export function App() {
     <Routes>
       <Route path="/" element={<EventsListPage />} />
       <Route path="/events/:id" element={<EventRoute />} />
+      <Route path="/checkout/:id" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/admin" element={<Navigate to="/admin/ticket-types" replace />} />
       <Route path="/admin/events" element={<RequireAdmin><EventsPage /></RequireAdmin>} />
       <Route path="/admin/ticket-types" element={<RequireAdmin><TicketTypesPage /></RequireAdmin>} />

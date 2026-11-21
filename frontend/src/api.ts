@@ -114,6 +114,40 @@ export const catalog = {
   deleteTicketType: (t: string, id: string) => request<void>(`/api/catalog/admin/ticket-types/${id}`, json('DELETE'), t),
 };
 
+// ---- inventory: tồn kho realtime (A8b) ----
+export type StockState = 'ON_SALE' | 'LOW' | 'SOLD_OUT' | 'PAUSED';
+export type Availability = { ticketTypeId: string; available: number; total: number; state: StockState };
+
+export const inventory = {
+  // Công khai, cache CDN 1 s – không gửi token.
+  availability: (eventId: string) => request<Availability[]>(`/api/inventory/events/${eventId}/availability`),
+};
+
+// ---- booking: giữ vé 10′ (A9, A11–A13) ----
+export type BookingStatus = 'PENDING' | 'CANCELLED' | 'EXPIRED' | 'AWAITING_PAYMENT' | 'CONFIRMED';
+export type Booking = {
+  id: string;
+  code: string;
+  status: BookingStatus;
+  cancelReason: string | null;
+  event: { id: string; title: string | null; venue: string | null; startsAt: string | null };
+  lines: { ticketTypeId: string; name: string; unitPrice: number; quantity: number; amount: number }[];
+  ticketCount: number;
+  subtotal: number;
+  fee: number;
+  total: number;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export const bookings = {
+  /** idempotencyKey: sinh 1 lần cho 1 lần bấm, gửi lại y nguyên khi retry → server trả cùng đơn. */
+  create: (t: string, idempotencyKey: string, eventId: string, items: { ticketTypeId: string; quantity: number }[]) =>
+    request<Booking>('/api/bookings', { ...json('POST', { eventId, items }), headers: { 'Idempotency-Key': idempotencyKey } }, t),
+  get: (t: string, id: string) => request<Booking>(`/api/bookings/${id}`, {}, t),
+  cancel: (t: string, id: string) => request<void>(`/api/bookings/${id}`, json('DELETE'), t),
+};
+
 /** Bắt đầu login Google: chuyển cả trang sang backend → Google → quay về /auth/callback. */
 export const GOOGLE_LOGIN_URL = '/api/identity/oauth2/authorization/google';
 
@@ -132,6 +166,12 @@ export function errorMessage(e: unknown): string {
       case 'EVENT_NOT_FOUND': return 'Sự kiện không tồn tại hoặc đã bị gỡ.';
       case 'TICKET_TYPE_NOT_FOUND': return 'Hạng vé không còn tồn tại. Hãy tải lại trang.';
       case 'CONFLICT': return 'Dữ liệu vừa bị thay đổi, hãy tải lại trang.';
+      case 'SOLD_OUT': return 'Rất tiếc, hạng vé bạn chọn vừa hết hoặc không còn đủ số lượng.';
+      case 'NOT_ON_SALE': return 'Hạng vé bạn chọn hiện không mở bán.';
+      case 'LIMIT_EXCEEDED': return e.message;
+      case 'INVENTORY_UNAVAILABLE': return 'Hệ thống giữ vé đang bận, vui lòng thử lại sau ít giây.';
+      case 'BOOKING_NOT_FOUND': return 'Không tìm thấy đơn hàng.';
+      case 'BOOKING_NOT_CANCELLABLE': return 'Đơn hàng không còn huỷ được.';
     }
     if (e.status === 401) return 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.';
     if (e.status === 403) return 'Bạn không có quyền thực hiện thao tác này.';
