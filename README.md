@@ -68,7 +68,7 @@ docs/                    # adr/, runbooks/, postmortems/, diagrams/, setup-steps
 
 **Cần có:** Java 21, Docker Desktop **đang chạy**, `make`, IntelliJ (để debug).
 
-`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `booking-service`, `payment-service`, `frontend`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
+`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `booking-service`, `payment-service`, `frontend`, `api-gateway`, `kafka-ui` (`localhost:8091`)**. Service mới sẽ được thêm vào khi có code.
 Port cố định trên máy, giống nhau dù chạy trong container hay IntelliJ (đặt trước cho cả service chưa có code):
 
 | Service | Port | | Service | Port |
@@ -77,7 +77,7 @@ Port cố định trên máy, giống nhau dù chạy trong container hay Intell
 | identity-service | 8081 | | payment-service | 8085 *(chưa có)* |
 | catalog-service | 8082 | | notification-service | 8086 *(chưa có)* |
 | inventory-service | 8083 *(chưa có)* | | postgres | 5432 |
-| frontend (nginx) | 8090 | | | |
+| frontend (nginx) | 8090 | | kafka-ui | 8091 |
 
 ### Lệnh `make` (gõ `make` để xem danh sách)
 ```bash

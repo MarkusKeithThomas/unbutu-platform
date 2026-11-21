@@ -7,7 +7,7 @@
 #                 root:root 600, không commit, không sửa tay.
 #
 # Khác compose.local.yml: không build, không mở port service ra máy; chỉ gateway bind 127.0.0.1:8080
-# (Tailscale Funnel → Internet).
+# (Tailscale Funnel → Internet). Ngoại lệ: kafka-ui 127.0.0.1:8091 (tailscale serve, chỉ tailnet – ADR-0008).
 
 # Log json-file (giống daemon.json) + gắn label compose vào mỗi dòng ("attrs") để OTel Collector của SigNoz
 # biết dòng log thuộc service/project nào (deploy/signoz/ingester/ingester.yaml, ADR-0006).
@@ -90,6 +90,33 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  # UI xem Kafka/Redpanda để trace bug: topic, message, consumer group + lag, DLT (ADR-0008). CHỈ ĐỌC (READONLY):
+  # không xoá topic / reset offset / gửi message từ UI. Không đăng nhập → chỉ an toàn vì chỉ mở trong tailnet:
+  # 127.0.0.1:8091 → `tailscale serve --https=9443` (KHÔNG Funnel) – docs/runbooks/kafka-ui.md.
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.3.0
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: *logging
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: prod
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: redpanda:9092
+      KAFKA_CLUSTERS_0_READONLY: "true"
+      DYNAMIC_CONFIG_ENABLED: "false"      # không cho sửa cấu hình cluster từ UI
+      AUTH_TYPE: DISABLED
+      JAVA_OPTS: -XX:MaxRAMPercentage=70
+    ports:
+      - "127.0.0.1:8091:8080"              # chỉ loopback; tailscale serve :9443 (tailnet only)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
   # Tồn kho giữ vé (Lua atomic) – sổ cái bền ở Postgres inventory_db. AOF everysec: restart không mất vé đang giữ (≤ 1 s).
   # noeviction: hết RAM thì BÁO LỖI, không lặng lẽ xoá key tồn kho. Chỉ network nội bộ (không publish, không vào `telemetry`).

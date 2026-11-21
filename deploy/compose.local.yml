@@ -220,6 +220,27 @@ services:
       retries: 20
     mem_limit: 512m
 
+  # UI xem Kafka (topic, message, consumer group + lag, DLT) – http://localhost:8091. Local: cho phép thao tác
+  # (reset offset, gửi message thử); prod chỉ đọc (compose.app.yml, ADR-0008).
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.3.0
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: redpanda:9092
+      DYNAMIC_CONFIG_ENABLED: "false"
+      AUTH_TYPE: DISABLED
+    ports:
+      - "127.0.0.1:8091:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+
   frontend:
     build:
       context: ../frontend
