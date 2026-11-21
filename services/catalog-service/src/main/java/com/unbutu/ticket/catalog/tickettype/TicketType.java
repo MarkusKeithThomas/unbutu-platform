@@ -11,6 +11,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -27,6 +30,9 @@ public class TicketType {
 
     public enum Status { DRAFT, ON_SALE, PAUSED }
 
+    /** Trạng thái khách nhìn thấy (bản nháp bị ẩn). */
+    public static final Set<Status> VISIBLE = Collections.unmodifiableSet(EnumSet.of(Status.ON_SALE, Status.PAUSED));
+
     @Id
     private UUID id;
 
@@ -41,6 +47,8 @@ public class TicketType {
 
     @Column(nullable = false)
     private String name;
+
+    private String description;
 
     @Column(nullable = false)
     private long price;
@@ -73,6 +81,7 @@ public class TicketType {
     void apply(Event event, TicketTypeRequest req, Instant now) {
         this.event = event;
         this.name = req.name().strip();
+        this.description = req.description() == null || req.description().isBlank() ? null : req.description().strip();
         this.price = req.price();
         this.totalQuantity = req.totalQuantity();
         this.status = req.status();

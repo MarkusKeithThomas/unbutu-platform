@@ -5,11 +5,12 @@
 
 ## Đang chờ người dùng
 - Review + merge **PR #28** (CRUD sự kiện + hạng vé, màn `/admin/*`) → Approve deploy.
+- Sau đó PR **khách xem/chọn vé** (nhánh `feat/catalog-client-browse`, base = nhánh #28): khi #28 merge (squash) → Claude `git rebase --onto origin/main feat/catalog-admin-crud feat/catalog-client-browse`, force-push, đổi base PR sang `main`.
 
 ## Làm ngay sau khi deploy
 1. **CAT-1** (`docs/tasks/catalog.md`): cấp ADMIN cho tài khoản quản trị trên prod
    (`UPDATE users SET roles='CUSTOMER,ADMIN' WHERE email='…'` trong `identity_db`) → đăng nhập lại → thử `/admin/ticket-types`.
-2. Gợi ý việc tiếp: inventory-service (cột "Đã bán", CAT-2) hoặc Gateway P0 (JWT tại biên, CORS); OBS-7 (đo CPU ClickHouse) vẫn mở.
+2. Việc tiếp theo: **ORD-1 – giữ vé 10′** (inventory + Redis Lua + booking) – xem `docs/tasks/catalog.md`. Mọi code: tự kiểm mở rộng 50k rps.
 
 ## Ghi chú local
 - DB local cũ: đã sửa checksum V1 của `catalog_db` + tạo tay user/DB `identity`. Gặp lại lỗi Flyway/DB thiếu → `make clean` (xoá hết dữ liệu local).

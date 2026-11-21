@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage, GOOGLE_LOGIN_URL } from '../api';
+import { takeReturnTo } from '../returnTo';
 import { useAuth } from '../auth';
 import { AuthLayout, GoogleButton, PasswordInput } from '../AuthLayout';
 
@@ -32,7 +33,7 @@ export function RegisterPage() {
     setBusy('pw');
     try {
       await register(email.trim(), password, fullName.trim());
-      navigate('/', { replace: true, state: { via: 'register' } });
+      navigate(takeReturnTo(), { replace: true });
     } catch (err) {
       setFormError(errorMessage(err));
       setBusy('');

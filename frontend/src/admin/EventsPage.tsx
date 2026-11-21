@@ -28,7 +28,7 @@ export function EventsPage() {
   const [busy, setBusy] = useState(false);
 
   const load = () =>
-    catalog.events().then(
+    withToken(catalog.events).then(
       (ev) => { setItems(ev); setLoadError(null); },
       (e) => setLoadError(errorMessage(e)),
     );

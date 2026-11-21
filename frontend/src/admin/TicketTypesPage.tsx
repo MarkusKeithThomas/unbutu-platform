@@ -7,7 +7,7 @@ import { AdminLayout, Confirm, Drawer, Pager, PlusIcon, SearchBox, fmtNumber, fm
 const STATUS: Record<TicketStatus, string> = { ON_SALE: 'Đang bán', PAUSED: 'Tạm dừng', DRAFT: 'Nháp' };
 const FILTERS: Array<TicketStatus | 'ALL'> = ['ALL', 'ON_SALE', 'PAUSED', 'DRAFT'];
 
-type Form = { eventId: string; name: string; price: string; total: string; status: TicketStatus };
+type Form = { eventId: string; name: string; description: string; price: string; total: string; status: TicketStatus };
 
 export function TicketTypesPage() {
   const { withToken } = useAuth();
@@ -25,7 +25,7 @@ export function TicketTypesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [tt, ev] = await Promise.all([withToken(catalog.ticketTypes), catalog.events()]);
+      const [tt, ev] = await Promise.all([withToken(catalog.ticketTypes), withToken(catalog.events)]);
       setItems(tt);
       setEvents(ev);
       setLoadError(null);
@@ -49,19 +49,19 @@ export function TicketTypesPage() {
   const openNew = () => {
     setEditing('new');
     setTried(false);
-    setForm({ eventId: events[0]?.id ?? '', name: '', price: '', total: '', status: 'DRAFT' });
+    setForm({ eventId: events[0]?.id ?? '', name: '', description: '', price: '', total: '', status: 'DRAFT' });
   };
   const openEdit = (t: TicketType) => {
     setEditing(t);
     setTried(false);
-    setForm({ eventId: t.eventId, name: t.name, price: String(t.price), total: String(t.totalQuantity), status: t.status });
+    setForm({ eventId: t.eventId, name: t.name, description: t.description ?? '', price: String(t.price), total: String(t.totalQuantity), status: t.status });
   };
   const close = () => {
     setEditing(null);
     setForm(null);
   };
 
-  const f = form ?? { eventId: '', name: '', price: '', total: '', status: 'DRAFT' as TicketStatus };
+  const f = form ?? { eventId: '', name: '', description: '', price: '', total: '', status: 'DRAFT' as TicketStatus };
   const published = editing !== null && editing !== 'new' && !editing.deletable; // đã từng mở bán
   const errName = tried && !f.name.trim();
   const errEvent = tried && !f.eventId;
@@ -73,7 +73,7 @@ export function TicketTypesPage() {
     setTried(true);
     if (!f.name.trim() || !f.eventId || !(Number(f.price) > 0) || !Number.isInteger(Number(f.price))
       || f.total === '' || !Number.isInteger(Number(f.total)) || Number(f.total) < 0) return;
-    const input: TicketTypeInput = { eventId: f.eventId, name: f.name.trim(), price: Number(f.price), totalQuantity: Number(f.total), status: f.status };
+    const input: TicketTypeInput = { eventId: f.eventId, name: f.name.trim(), description: f.description.trim() || null, price: Number(f.price), totalQuantity: Number(f.total), status: f.status };
     setBusy(true);
     try {
       if (editing === 'new') {
@@ -106,7 +106,7 @@ export function TicketTypesPage() {
         toast.show(`Đã xoá “${t0.name}”`);
       } else {
         // Đã từng mở bán → giữ lại (lịch sử đơn), chỉ chuyển Tạm dừng.
-        const input: TicketTypeInput = { eventId: t0.eventId, name: t0.name, price: t0.price, totalQuantity: t0.totalQuantity, status: 'PAUSED' };
+        const input: TicketTypeInput = { eventId: t0.eventId, name: t0.name, description: t0.description, price: t0.price, totalQuantity: t0.totalQuantity, status: 'PAUSED' };
         const updated = await withToken((t) => catalog.updateTicketType(t, t0.id, input));
         setItems((old) => (old ?? []).map((x) => (x.id === updated.id ? updated : x)));
         toast.show(`Đã tạm dừng “${t0.name}”`);
@@ -184,6 +184,11 @@ export function TicketTypesPage() {
             <input id="fm-name" className={`a-input${errName ? ' invalid' : ''}`} value={f.name} onChange={(e) => set('name')(e.target.value)}
               placeholder="VD: VIP" maxLength={100} aria-invalid={errName} autoFocus />
             {errName && <span className="field-error">Bắt buộc nhập tên.</span>}
+          </div>
+          <div className="field">
+            <label htmlFor="fm-desc">Mô tả ngắn</label>
+            <input id="fm-desc" className="a-input" value={f.description} onChange={(e) => set('description')(e.target.value)}
+              placeholder="VD: Khu ngồi sát sân khấu, quà tặng" maxLength={255} />
           </div>
           <div className="field">
             <label htmlFor="fm-event">Sự kiện *</label>

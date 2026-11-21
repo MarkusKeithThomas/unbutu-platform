@@ -1,22 +1,16 @@
 import type { ReactElement } from 'react';
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { EventsPage } from './admin/EventsPage';
 import { TicketTypesPage } from './admin/TicketTypesPage';
 import { useAuth } from './auth';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
-import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { EventPage } from './shop/EventPage';
+import { EventsListPage } from './shop/EventsListPage';
 
 function Loading() {
   return <div className="center">Đang tải…</div>;
-}
-
-/** Chỉ cho người đã đăng nhập; chưa → /login. */
-function RequireAuth({ children }: { children: ReactElement }) {
-  const { state } = useAuth();
-  if (state.status === 'loading') return <Loading />;
-  return state.status === 'authenticated' ? children : <Navigate to="/login" replace />;
 }
 
 /** Chỉ cho ADMIN (API catalog cũng kiểm tra lại – đây chỉ để không hiện màn không dùng được). */
@@ -42,10 +36,17 @@ function GuestOnly({ children }: { children: ReactElement }) {
   return state.status === 'authenticated' ? <Navigate to="/" replace /> : children;
 }
 
+/** key theo id: sang sự kiện khác → mount lại (state + giỏ vé của sự kiện đó). */
+function EventRoute() {
+  const { id } = useParams();
+  return <EventPage key={id} />;
+}
+
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
+      <Route path="/" element={<EventsListPage />} />
+      <Route path="/events/:id" element={<EventRoute />} />
       <Route path="/admin" element={<Navigate to="/admin/ticket-types" replace />} />
       <Route path="/admin/events" element={<RequireAdmin><EventsPage /></RequireAdmin>} />
       <Route path="/admin/ticket-types" element={<RequireAdmin><TicketTypesPage /></RequireAdmin>} />
