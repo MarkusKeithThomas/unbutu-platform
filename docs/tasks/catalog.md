@@ -3,8 +3,8 @@
 ## Đang mở
 - [ ] **ROLLOUT ORD-1b + ORD-1c lên prod** (unbutu-platform #33 + pro-ticket-workload #5, đã gộp):
   1. ✅ Secret `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (Claude tạo 2026-11-21, value ngẫu nhiên – người dùng sẽ đổi).
-  2. Merge + apply pro-ticket-workload **#5**.
-  3. Claude chạy `docs/runbooks/add-service-database.md` cho `inventory` và `booking`.
+  2. ✅ Merge + apply pro-ticket-workload **#5** (2026-11-21).
+  3. ✅ DB `inventory_db`, `booking_db` đã tạo trên prod (đăng nhập bằng password trong secret OK).
   4. #33 Ready → merge → Approve deploy → Claude kiểm prod (availability, giữ vé thử, huỷ).
 - [ ] **PAY-1 – Thanh toán (sau ORD-1)** – đã chốt 2026-11-21: (1) làm SAU khi giữ vé xong; (2) **cổng giả lập trước** (payment-service tự phục vụ trang "ngân hàng giả", cùng giao thức VNPay: URL ký HMAC-SHA512, IPN server→server, return URL, chỉnh tỉ lệ lỗi/độ trễ để luyện sự cố) → **adapter VNPay sandbox sau**; (3) trả tiền **sau khi hết hạn giữ**: còn vé → giữ lại + `CONFIRMED`, hết vé → `REFUND_PENDING` + hoàn tiền tự động. API: A10 checkout (`Idempotency-Key`, bấm lại → cùng URL), A14 IPN (nguồn sự thật), A15 return (chỉ redirect). Thiết kế: private-docs/thiet-ke-ban-ve/02 §3–§5.
 - [ ] **ORD-1 – Giữ vé 10′ (PR kế tiếp)**: inventory-service + **Redis (Lua atomic, chống oversell)** – `GET /api/inventory/events/{id}/availability` (A8b, "Còn x / y"), `POST /internal/reservations`; booking-service `POST /api/bookings` (JWT + `Idempotency-Key`, ≤ 4 vé) → `PENDING` + `expiresAt`, `GET /api/bookings/{id}`, `DELETE` huỷ, hết hạn tự nhả. UI: nút "Tiếp tục thanh toán" đọc giỏ `sessionStorage cart:<eventId>`. Thiết kế: private-docs/thiet-ke-ban-ve/02 §1, §3, §6. **Đã chốt 2026-11-21**: (1) catalog → inventory/booking qua **Redpanda + Outbox** (`catalog.event.v1`: `ticket-type.upserted` giá + tổng số); (2) **Redis Lua giữ chỗ, Postgres là sổ cái**; (3) **4 vé / tài khoản / sự kiện**; (4) có UI bước 2 (form người mua + đếm ngược 10′ + "← Chọn lại vé" = huỷ giữ); nút "Xác nhận thanh toán" để PR thanh toán.

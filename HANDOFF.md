@@ -6,8 +6,8 @@
 ## Đang chờ người dùng – ROLLOUT inventory + booking (đã gộp: unbutu-platform #33 + pro-ticket-workload #5)
 1. ✅ Secret AWS `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (Claude tạo, value ngẫu nhiên – người dùng sẽ đổi;
    đổi thì đổi cả password user Postgres – runbook mục "rotate").
-2. Merge + apply **pro-ticket-workload #5**.
-3. Claude tạo DB `inventory`, `booking` trên prod (`docs/runbooks/add-service-database.md`).
+2. ✅ pro-ticket-workload #5 đã merge + apply.
+3. ✅ DB `inventory_db`, `booking_db` đã tạo trên prod.
 4. **#33** draft → Ready → merge → Approve deploy → Claude kiểm prod.
    Bài học #32: PR xếp chồng merge vào nhánh cũ sau khi PR dưới squash → mất khỏi main. Chỉ mở PR khi base là `main`.
 
