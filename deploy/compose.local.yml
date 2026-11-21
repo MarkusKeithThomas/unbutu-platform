@@ -28,6 +28,32 @@ services:
       timeout: 3s
       retries: 10
 
+  # Event log (Kafka API). Listener "external" cho service chạy trong IntelliJ: localhost:19092.
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.2.10
+    # Local: GIỮ developer_mode của image (bỏ fsync, cho chạy với 512 MB) – mất dữ liệu local không sao.
+    # Prod (compose.app.yml) tắt developer_mode. auto_create_topics_enabled mặc định false ở cả hai.
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --default-log-level=warn
+    ports:
+      - "127.0.0.1:19092:19092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -Eq 'Healthy:.+true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 768m
+
   catalog-service:
     build:
       context: ..
@@ -125,3 +151,4 @@ services:
 
 volumes:
   pgdata:
+  redpanda-data:

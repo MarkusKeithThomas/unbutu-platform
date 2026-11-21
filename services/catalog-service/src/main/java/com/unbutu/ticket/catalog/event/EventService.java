@@ -1,6 +1,8 @@
 package com.unbutu.ticket.catalog.event;
 
+import com.unbutu.ticket.catalog.outbox.Outbox;
 import com.unbutu.ticket.catalog.tickettype.TicketTypeRepository;
+import com.unbutu.ticket.events.catalog.CatalogEvents;
 import com.unbutu.ticket.catalog.web.CatalogException;
 import java.time.Clock;
 import java.util.UUID;
@@ -14,6 +16,7 @@ public class EventService {
 
     private final EventRepository events;
     private final TicketTypeRepository ticketTypes;
+    private final Outbox outbox;
     private final Clock clock;
 
     public Event get(UUID id) {
@@ -22,13 +25,16 @@ public class EventService {
 
     @Transactional
     public Event create(EventRequest req) {
-        return events.save(Event.create(req, clock.instant()));
+        Event event = events.save(Event.create(req, clock.instant()));
+        publishUpserted(event);
+        return event;
     }
 
     @Transactional
     public Event update(UUID id, EventRequest req) {
         Event event = get(id);
         event.apply(req, clock.instant());
+        publishUpserted(event);
         return event;
     }
 
@@ -40,6 +46,12 @@ public class EventService {
             throw CatalogException.conflict("EVENT_HAS_TICKET_TYPES", "Sự kiện còn hạng vé, hãy xoá hạng vé trước");
         }
         events.delete(event);
+        outbox.append(CatalogEvents.TOPIC, id, CatalogEvents.EVENT_DELETED, new CatalogEvents.EventDeleted(id));
+    }
+
+    private void publishUpserted(Event e) {
+        outbox.append(CatalogEvents.TOPIC, e.getId(), CatalogEvents.EVENT_UPSERTED, new CatalogEvents.EventUpserted(
+                e.getId(), e.getTitle(), e.getType().name(), e.getVenue(), e.getStartsAt(), e.getUpdatedAt()));
     }
 
     public static CatalogException notFound() {

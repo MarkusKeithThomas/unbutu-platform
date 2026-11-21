@@ -15,7 +15,7 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | `catalog-service` | Chạy prod: sự kiện + hạng vé (đọc công khai, ghi cần ADMIN) |
 | `identity`, `inventory`, `booking`, `payment`, `notification` | Mới có khung thư mục + README, chưa có code |
 | `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
-| `libs/event-contracts` | Mới có khung, chưa có code |
+| `libs/event-contracts` | Schema event (`EventEnvelope`, `CatalogEvents`) – topic `catalog.event.v1` |
 | `frontend/` | React + Vite (nginx): đăng nhập/đăng ký, Google login, quản trị sự kiện + hạng vé |
 | CI/CD | Xong: PR → CI → merge `main` → Release (image theo digest) → Deploy **cần Approve**, tự rollback |
 | Observability | SigNoz (ADR-0006): log JSON ECS + trace + metrics (OpenTelemetry Java agent, chỉ prod) + metrics host/container, dashboard dạng code |
@@ -41,7 +41,7 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 ## Công nghệ
 Java 21 · Spring Boot 4.1 · Spring Cloud Gateway 5 (WebFlux) · PostgreSQL 17 + Flyway · Gradle Kotlin DSL ·
 Docker Compose · GitHub Actions + GHCR · Tailscale (Funnel, OIDC) · AWS SSM/Secrets Manager (cấu hình prod) · SigNoz.
-Dự kiến: Redis, RabbitMQ (Saga/Outbox), OpenTelemetry.
+Redpanda (Kafka API) + Transactional Outbox (ADR-0007). Dự kiến: Redis (giữ vé, Lua).
 
 ## Cấu trúc repo
 ```
@@ -60,7 +60,7 @@ docs/                    # adr/, runbooks/, postmortems/, diagrams/, setup-steps
 
 **Cần có:** Java 21, Docker Desktop **đang chạy**, `make`, IntelliJ (để debug).
 
-`compose.local.yml` hiện chạy **`postgres`, `catalog-service`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
+`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `identity-service`, `catalog-service`, `frontend`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
 Port cố định trên máy, giống nhau dù chạy trong container hay IntelliJ (đặt trước cho cả service chưa có code):
 
 | Service | Port | | Service | Port |

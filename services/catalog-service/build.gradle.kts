@@ -4,6 +4,8 @@ plugins {
 
 dependencies {
     implementation(project(":libs:platform-starter"))   // X-Request-Id → MDC, RestClient propagate
+    implementation(project(":libs:event-contracts"))    // schema event catalog.event.v1
+    implementation(libs.spring.boot.starter.kafka)      // Outbox relay → Redpanda
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.security)
