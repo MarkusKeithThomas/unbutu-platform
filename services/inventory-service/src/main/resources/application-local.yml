@@ -1,0 +1,14 @@
+# Profile "local": chạy trong IntelliJ (SPRING_PROFILES_ACTIVE=local); hạ tầng trong container. Bảng port: README.md.
+server:
+  port: 8083
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/inventory_db
+    username: inventory
+    password: inventory
+  data:
+    redis:
+      host: localhost
+  kafka:
+    bootstrap-servers: localhost:19092

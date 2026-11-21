@@ -45,6 +45,10 @@ postgresql = { module = "org.postgresql:postgresql" }
 # Event log (Redpanda – Kafka API). Transactional Outbox ở producer, consumer idempotent theo eventId.
 spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-starter-kafka" }
 
+# Redis (inventory: giữ vé bằng Lua) + JDBC thuần (inventory không dùng JPA)
+spring-boot-starter-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis" }
+spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+
 # Test với Postgres thật trong Docker
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }

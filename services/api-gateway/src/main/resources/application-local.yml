@@ -8,5 +8,7 @@ services:
     url: http://localhost:8082
   identity:
     url: http://localhost:8081
+  inventory:
+    url: http://localhost:8083
   frontend:
     url: http://localhost:8090
