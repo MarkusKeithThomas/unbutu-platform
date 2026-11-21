@@ -14,5 +14,7 @@ services:
     url: http://localhost:8084
   payment:
     url: http://localhost:8085
+  notification:
+    url: http://localhost:8086
   frontend:
     url: http://localhost:8090

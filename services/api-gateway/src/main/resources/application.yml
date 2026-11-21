@@ -29,6 +29,10 @@ spring:
               uri: ${services.payment.url}
               predicates:
                 - Path=/api/payments/**
+            - id: tickets                    # vé QR – nằm trong notification-service (ADR-0009)
+              uri: ${services.notification.url}
+              predicates:
+                - Path=/api/tickets/**
             # UI (SPA, nginx): mọi path còn lại. order lớn → xét SAU các route /api/** ở trên.
             - id: frontend
               uri: ${services.frontend.url}
@@ -49,6 +53,8 @@ services:
     url: ${BOOKING_SERVICE_URL:http://booking-service:8080}
   payment:
     url: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
+  notification:
+    url: ${NOTIFICATION_SERVICE_URL:http://notification-service:8080}
   frontend:
     url: ${FRONTEND_SERVICE_URL:http://frontend:8080}
 

@@ -42,18 +42,27 @@ export FRONTEND_IMAGE=frontend:ci APP_VERSION=ci
 
 # ---------- 2. env/<service>.env – cùng tên biến với env-map prod ----------
 rand() { openssl rand -hex 16; }
-DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand); DB_BOOKING=$(rand); DB_PAYMENT=$(rand)
+DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand); DB_BOOKING=$(rand); DB_PAYMENT=$(rand); DB_NOTIFICATION=$(rand)
 JWT_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER 2>/dev/null | base64 | tr -d '\n')
+QR_KEY=$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -outform DER 2>/dev/null | base64 | tr -d '\n')   # cùng định dạng prod
 mkdir -p deploy/env
 cat >deploy/env/postgres.env <<ENV
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$(rand)
-SERVICE_DATABASES=catalog identity inventory booking payment
+SERVICE_DATABASES=catalog identity inventory booking payment notification
 CATALOG_DB_PASSWORD=$DB_CATALOG
 IDENTITY_DB_PASSWORD=$DB_IDENTITY
 INVENTORY_DB_PASSWORD=$DB_INVENTORY
 BOOKING_DB_PASSWORD=$DB_BOOKING
 PAYMENT_DB_PASSWORD=$DB_PAYMENT
+NOTIFICATION_DB_PASSWORD=$DB_NOTIFICATION
+ENV
+cat >deploy/env/notification-service.env <<ENV
+ENVIRONMENT=prod
+DB_URL=jdbc:postgresql://postgres:5432/notification_db
+DB_USERNAME=notification
+DB_PASSWORD=$DB_NOTIFICATION
+QR_SIGNING_KEY=$QR_KEY
 ENV
 cat >deploy/env/payment-service.env <<ENV
 ENVIRONMENT=prod
@@ -164,5 +173,11 @@ expect "IPN không chữ ký → 200 RspCode 97 (đặc tả VNPay)" 200 "$BASE/
 expect "trang cổng giả lập sai chữ ký → 400" 400 "$BASE/api/payments/mock/pay?vnp_TxnRef=x"
 expect "giữ vé hạng không tồn tại → 409" 409 -H "Authorization: Bearer $ACCESS" -H "Idempotency-Key: smoke-key-$RANDOM" "${JSON[@]}" \
     -X POST "$BASE/api/bookings" -d "$NO_EVENT"
+
+expect "vé của tôi không token → 401" 401 "$BASE/api/tickets/me"
+expect "vé của tôi (có token) → trang rỗng → 200" 200 -H "Authorization: Bearer $ACCESS" "$BASE/api/tickets/me"
+expect "JWKS khoá QR (công khai) → 200" 200 "$BASE/api/tickets/.well-known/jwks.json"
+[[ $(jq -r '.keys[0].crv' <<<"$BODY") == P-256 && $(jq -r '.keys[0].d // "none"' <<<"$BODY") == none ]] \
+    || fail "JWKS QR phải là P-256 và KHÔNG lộ private key (d) – body: ${BODY:0:200}"
 
 log "SMOKE TEST ĐẠT – stack compose.app.yml chạy được như deploy"

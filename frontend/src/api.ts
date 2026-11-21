@@ -145,10 +145,36 @@ export const bookings = {
   create: (t: string, idempotencyKey: string, eventId: string, items: { ticketTypeId: string; quantity: number }[]) =>
     request<Booking>('/api/bookings', { ...json('POST', { eventId, items }), headers: { 'Idempotency-Key': idempotencyKey } }, t),
   get: (t: string, id: string) => request<Booking>(`/api/bookings/${id}`, {}, t),
+  /** A12 – lịch sử đơn, mới trước (Slice). */
+  mine: (t: string, page = 0, size = 10) => request<Slice<Booking>>(`/api/bookings/me?page=${page}&size=${size}`, {}, t),
   cancel: (t: string, id: string) => request<void>(`/api/bookings/${id}`, json('DELETE'), t),
   /** A10 – trả URL cổng thanh toán; bấm lại → cùng URL. */
   checkout: (t: string, id: string, method: string, buyer: { name: string; email: string; phone: string }) =>
     request<{ paymentUrl: string }>(`/api/bookings/${id}/checkout`, json('POST', { method, buyer }), t),
+};
+
+// ---- vé điện tử (notification-service, ADR-0009) ----
+export type Ticket = {
+  id: string;
+  bookingId: string;
+  bookingCode: string;
+  seq: number;
+  eventId: string;
+  eventTitle: string | null;
+  venue: string | null;
+  startsAt: string | null;
+  ticketTypeId: string;
+  ticketTypeName: string;
+  unitPrice: number;
+  status: 'VALID' | 'USED' | 'VOID';
+  qr: string; // JWS ES256 – vẽ thành mã QR, cổng soát vé verify chữ ký
+  issuedAt: string;
+};
+
+export const tickets = {
+  /** Rỗng = chưa phát (vé phát bất đồng bộ ngay sau CONFIRMED) → poll. */
+  ofBooking: (t: string, bookingId: string) =>
+    request<{ bookingId: string; tickets: Ticket[] }>(`/api/tickets/bookings/${bookingId}`, {}, t),
 };
 
 /** Bắt đầu login Google: chuyển cả trang sang backend → Google → quay về /auth/callback. */

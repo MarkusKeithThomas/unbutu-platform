@@ -14,7 +14,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       # Mỗi service 1 user + 1 database (xem postgres/init/01-create-service-databases.sh)
-      SERVICE_DATABASES: catalog identity inventory booking payment
+      SERVICE_DATABASES: catalog identity inventory booking payment notification
       CATALOG_DB_PASSWORD: catalog
       IDENTITY_DB_PASSWORD: identity
     volumes:
@@ -162,6 +162,35 @@ services:
       retries: 20
     mem_limit: 512m
 
+  notification-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: notification-service
+    image: notification-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/notification_db
+      DB_USERNAME: notification
+      DB_PASSWORD: notification
+      IDENTITY_JWKS_URI: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}/.well-known/jwks.json
+      NOTIFICATION_QR_ALLOW_EPHEMERAL_KEY: "true"   # local: khoá ký QR tạm (prod: QR_SIGNING_KEY từ AWS SM)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8086:8080"   # port cố định của notification
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
   catalog-service:
     build:
       context: ..
@@ -269,6 +298,7 @@ services:
       INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL:-http://inventory-service:8080}
       BOOKING_SERVICE_URL: ${BOOKING_SERVICE_URL:-http://booking-service:8080}
       PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL:-http://payment-service:8080}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:8080}
       FRONTEND_SERVICE_URL: ${FRONTEND_SERVICE_URL:-http://frontend:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # container gọi ra máy Mac
