@@ -15,7 +15,7 @@ class PaymentResultListener {
     private final JsonMapper json;
     private final SettlementService settlement;
 
-    @KafkaListener(topics = PaymentEvents.TOPIC)
+    @KafkaListener(topics = PaymentEvents.TOPIC, properties = "group.instance.id=${booking.kafka.instance-id}-payment")
     void onMessage(String value) {
         JsonNode envelope = json.readTree(value);
         settlement.onResult(envelope.path("type").asString(),

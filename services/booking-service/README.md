@@ -24,6 +24,11 @@
 - Hết hạn: `BookingExpiryJob` 5 s – `UPDATE … WHERE id IN (… FOR UPDATE SKIP LOCKED)` → `EXPIRED` + nhả vé (inventory sweeper là lớp dự phòng).
 - **PAY-1**: `POST /api/bookings/{id}/checkout {method, buyer}` → `AWAITING_PAYMENT` + `paymentUrl` (bấm lại → cùng giao dịch).
   Nghe `payment.result.v1`: `succeeded` → inventory **chốt vé** (`/internal/.../commit`) → `CONFIRMED`; không còn đủ vé (trả muộn) / sai số tiền → `REFUND_PENDING` → hoàn tiền → `REFUNDED`; `failed` → `PENDING` (thanh toán lại). `AWAITING_PAYMENT` có 5′ ân hạn trước khi `EXPIRED`.
-- Chưa có: Outbox `booking.*` (cho ticketing / notification), đối soát giao dịch treo (PAY-1b).
+- **PAY-1c**: `CONFIRMED` → Outbox (`libs/outbox`, cùng transaction với `UPDATE … → CONFIRMED`) → topic `booking.event.v1`
+  (key = bookingId, 6 partition, giữ 30 ngày), type `booking.confirmed`. Event "béo" (người mua, sự kiện, từng hạng vé)
+  → ticketing / notification không gọi ngược booking. Event lặp → UPDATE không đổi dòng → không phát lần 2.
+- **Static membership**: mỗi listener có `group.instance.id` cố định `${booking.kafka.instance-id}-payment|-catalog`
+  (env `KAFKA_GROUP_INSTANCE_ID`, mặc định `booking-1`), `session.timeout.ms` 60 s → deploy/restart không rebalance.
+  Scale nhiều bản cùng lúc: mỗi bản một id khác (`booking-1..N`), trùng id → broker fence bản cũ.
 
 Xem `ARCHITECTURE.md` §4 để biết quy ước chung.

@@ -17,7 +17,7 @@ class CatalogEventsListener {
     private final JsonMapper json;
     private final PriceBook book;
 
-    @KafkaListener(topics = CatalogEvents.TOPIC)
+    @KafkaListener(topics = CatalogEvents.TOPIC, properties = "group.instance.id=${booking.kafka.instance-id}-catalog")
     void onMessage(String value) {
         JsonNode envelope = json.readTree(value);
         JsonNode payload = envelope.path("payload");
