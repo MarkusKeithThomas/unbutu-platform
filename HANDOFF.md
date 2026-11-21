@@ -3,7 +3,7 @@
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-22.
 
-## Làm tiếp – Load test + UI cho nhà tuyển dụng (`docs/tasks/loadtest.md`)
+## Làm tiếp – Load test (`docs/tasks/loadtest.md`)
 Đã chốt: k6 chạy trên unbutu (giới hạn CPU), quyền chạy = role `LOADTEST`, thứ tự A → B → C.
 1. **LT-1 = OBS-5**: dashboard RED theo service + JVM (`docs/tasks/observability.md`).
 2. LT-2 giới hạn tài nguyên container prod → LT-3 dữ liệu test → LT-4 chặn cổng giả lập → LT-5 kịch bản k6 → LT-6 chạy tay, đặt trần.

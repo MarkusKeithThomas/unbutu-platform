@@ -1,15 +1,15 @@
-# Task – load test (S6) + UI cho nhà tuyển dụng
+# Task – load test (S6)
 
-Mục tiêu: nhà tuyển dụng đăng nhập bằng tài khoản role `LOADTEST`, chọn kịch bản có sẵn, bấm chạy, xem kết quả trực tiếp
+Mục tiêu: người dùng đăng nhập bằng tài khoản role `LOADTEST`, chọn kịch bản có sẵn, bấm chạy, xem kết quả trực tiếp
 (phía client + phía server) và kiểm tra đúng đắn sau test (oversell = 0). Gắn với ARCHITECTURE §8 S6.
 
 **Đã chốt 2026-11-22:**
 1. k6 chạy **trên unbutu**, trong `loadtest-service`, có giới hạn CPU. Kết quả ghi rõ là đo nội bộ (gateway trong mạng Docker, không đi qua Funnel).
-2. Quyền chạy: **tài khoản role `LOADTEST`** (người dùng cấp cho từng nhà tuyển dụng), có hạn mức lượt/ngày + audit log.
+2. Quyền chạy: **tài khoản role `LOADTEST`** (ADMIN cấp cho từng người), có hạn mức lượt/ngày + audit log.
 3. Thứ tự **A → B → C**: chạy tay trước để biết sức chịu của máy rồi mới làm UI.
 
 ```
-Nhà tuyển dụng ─► frontend /loadtest ─► api-gateway ─► loadtest-service
+Người dùng ─────► frontend /loadtest ─► api-gateway ─► loadtest-service
                                                          ├─ khoá Redis: 1 lượt chạy tại 1 thời điểm
                                                          ├─ k6 (tiến trình con, cpus giới hạn) ─► api-gateway ─► các service
                                                          └─ số liệu theo giây ─► Postgres loadtest_db ─► SSE / lịch sử
@@ -47,7 +47,7 @@ Nhà tuyển dụng ─► frontend /loadtest ─► api-gateway ─► loadtest
 ### Giai đoạn C – UI xem kết quả
 - [ ] **LT-11 · Màn trực tiếp**: rps, p50/p95/p99, tỉ lệ lỗi, VU theo thời gian (SSE, 1 giây/điểm).
 - [ ] **LT-12 · Phía server**: CPU/RAM từng container, lag Kafka, độ trễ theo service – loadtest-service truy vấn API SigNoz
-  (nhà tuyển dụng không vào được tailnet). Key API SigNoz để trên AWS (ADR-0004).
+  (người dùng ngoài không vào được tailnet). Key API SigNoz để trên AWS (ADR-0004).
 - [ ] **LT-13 · Kiểm tra đúng đắn sau test**: đã bán ≤ tổng (oversell = 0), tiền thu khớp số vé phát, outbox không còn tồn, vé phát = đơn CONFIRMED.
 - [ ] **LT-14 · Lịch sử + so sánh** 2 lượt cạnh nhau, link chia sẻ kết quả (chỉ đọc).
 
