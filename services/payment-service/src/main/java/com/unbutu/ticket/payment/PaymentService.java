@@ -88,7 +88,7 @@ public class PaymentService {
             }
             int attempt = payments.latest(bookingId).map(r -> r.attempt() + 1).orElse(1);
             var row = new PaymentRepository.Row(UUID.randomUUID(), bookingId, bookingCode, attempt, bookingCode + "-" + attempt,
-                    amount, method, "PENDING", expireAt);
+                    amount, method, "PENDING", expireAt, VNP_TIME.format(now), now);
             payments.insert(row);
             return row;
         });
@@ -109,7 +109,7 @@ public class PaymentService {
         m.put("vnp_BankCode", BANK_CODE.get(p.method()));
         m.put("vnp_ReturnUrl", publicBaseUrl + "/api/payments/vnpay/return");
         m.put("vnp_IpAddr", clientIp == null ? "127.0.0.1" : clientIp);
-        m.put("vnp_CreateDate", VNP_TIME.format(clock.instant()));
+        m.put("vnp_CreateDate", p.vnpCreateDate());   // cố định → bấm lại ra đúng URL cũ
         m.put("vnp_ExpireDate", VNP_TIME.format(p.expireAt()));
         return m;
     }
@@ -140,21 +140,42 @@ public class PaymentService {
         }
         String rc = params.getOrDefault("vnp_ResponseCode", "");
         boolean ok = "00".equals(rc) && "00".equals(params.getOrDefault("vnp_TransactionStatus", ""));
+        if (!settle(p, ok, params.get("vnp_TransactionNo"), rc, "IPN")) {
+            return new IpnResponse("02", "Order already confirmed");
+        }
+        return new IpnResponse("00", "Confirm Success");
+    }
+
+    /**
+     * Áp kết quả cuối của 1 giao dịch – DÙNG CHUNG cho IPN và job đối soát: PENDING → SUCCEEDED/FAILED + Outbox
+     * trong 1 transaction. false = đã có kết quả từ trước (IPN và đối soát chạy đua → chỉ 1 bên thắng).
+     */
+    boolean settle(PaymentRepository.Row p, boolean ok, String txnNo, String rc, String source) {
         String status = ok ? "SUCCEEDED" : "FAILED";
-        String txnNo = params.get("vnp_TransactionNo");
         Boolean changed = tx.execute(s -> {
-            if (!payments.complete(p.id(), status, txnNo, rc)) {
+            // Thành công tới SAU khi đối soát đã kết luận "khách bỏ ngang / chưa trả" (IPN cực trễ, trả sau hạn) → tiền đã
+            // bị trừ: mở lại FAILED(ABANDONED|NOT_PAID) → SUCCEEDED để booking quyết toán (còn vé → chốt, hết → hoàn tiền).
+            if (!payments.complete(p.id(), status, txnNo, rc) && !(ok && payments.reopenAbandoned(p.id(), txnNo, rc))) {
                 return false;
             }
             outbox.append(PaymentEvents.TOPIC, p.bookingId(), ok ? PaymentEvents.SUCCEEDED : PaymentEvents.FAILED,
                     new PaymentEvents.PaymentResult(p.id(), p.bookingId(), status, p.amount(), p.method(), txnNo, rc, clock.instant()));
             return true;
         });
-        if (!Boolean.TRUE.equals(changed)) {
-            return new IpnResponse("02", "Order already confirmed");
+        if (Boolean.TRUE.equals(changed)) {
+            log.info("{}: {} {} {} đ → {} (rc={})", source, p.bookingCode(), p.txnRef(), p.amount(), status, rc);
         }
-        log.info("IPN: {} {} {} đ → {}", p.bookingCode(), p.txnRef(), p.amount(), status);
-        return new IpnResponse("00", "Confirm Success");
+        return Boolean.TRUE.equals(changed);
+    }
+
+    /** Ứng viên đối soát (PENDING quá lâu). */
+    public java.util.List<PaymentRepository.Row> pendingOlderThan(Instant olderThan, int limit) {
+        return payments.pendingOlderThan(olderThan, limit);
+    }
+
+    /** Job đối soát áp kết quả querydr – cùng đường với IPN. */
+    public boolean settleFromReconcile(PaymentRepository.Row p, boolean ok, String txnNo, String rc) {
+        return settle(p, ok, txnNo, rc, "ĐỐI SOÁT");
     }
 
     /** Return URL: chỉ verify chữ ký rồi đưa về UI – KHÔNG đổi trạng thái (IPN là nguồn sự thật). */

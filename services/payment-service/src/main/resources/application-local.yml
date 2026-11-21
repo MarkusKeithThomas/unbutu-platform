@@ -11,5 +11,7 @@ spring:
     bootstrap-servers: localhost:19092
 
 payment:
+  vnpay:
+    api-url: http://localhost:8085/api/payments/mock/merchant_webapi/api/transaction
   mock:
     ipn-url: http://localhost:8085/api/payments/vnpay/ipn

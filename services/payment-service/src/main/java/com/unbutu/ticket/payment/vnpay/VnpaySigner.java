@@ -57,6 +57,23 @@ public class VnpaySigner {
         return canonical(params) + "&" + HASH + "=" + sign(params);
     }
 
+    /** API merchant_webapi (querydr, refund): HMAC-SHA512 của các trường nối bằng "|" theo thứ tự đặc tả. */
+    public String signPipe(String... fields) {
+        String data = String.join("|", java.util.Arrays.stream(fields).map(f -> f == null ? "" : f).toList());
+        try {
+            Mac mac = Mac.getInstance("HmacSHA512");
+            mac.init(new SecretKeySpec(secret, "HmacSHA512"));
+            return HexFormat.of().formatHex(mac.doFinal(data.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public boolean verifyPipe(String given, String... fields) {
+        return given != null && MessageDigest.isEqual(given.toLowerCase().getBytes(StandardCharsets.US_ASCII),
+                signPipe(fields).getBytes(StandardCharsets.US_ASCII));
+    }
+
     /** So sánh hằng thời gian (không lộ chữ ký qua độ trễ). */
     public boolean verify(Map<String, String> params) {
         String given = params.get(HASH);

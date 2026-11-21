@@ -1,19 +1,18 @@
 package com.unbutu.ticket.payment.mock;
 
 import com.unbutu.ticket.payment.PaymentService;
+import com.unbutu.ticket.payment.mock.fault.Dice;
+import com.unbutu.ticket.payment.mock.fault.MockFaults;
 import com.unbutu.ticket.payment.vnpay.VnpaySigner;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,13 +24,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.util.HtmlUtils;
 
 /**
  * CỔNG THANH TOÁN GIẢ LẬP – nói đúng giao thức VNPay 2.1.0 (URL ký HMAC-SHA512 → trang ngân hàng → IPN server→server
- * → return URL). Không trừ tiền thật. Dùng để chạy end-to-end và LUYỆN SỰ CỐ: IPN chậm (ipn-delay), IPN mất
- * (ipn-drop-rate), trả sau hạn giữ (allow-late). Thay bằng VNPay sandbox: đổi pay-url / tmn-code / hash-secret.
+ * → return URL → querydr). Không trừ tiền thật. Mặc định happy case; lỗi thường gặp bật bằng env MOCK_FAULT_* (mock/fault).
+ * Thay bằng VNPay sandbox: đổi pay-url / api-url / tmn-code / hash-secret, PAYMENT_MOCK_ENABLED=false.
  */
 @Slf4j
 @RestController
@@ -40,115 +38,110 @@ import org.springframework.web.util.HtmlUtils;
 class MockGatewayController {
 
     private final VnpaySigner signer;
-    private final RestClient http;
+    private final MockBank bank;
+    private final MockIpnSender ipn;
+    private final MockFaults faults;
+    private final Dice dice;
     private final Clock clock;
-    private final String ipnUrl;
-    private final Duration ipnDelay;
-    private final double ipnDropRate;
     private final boolean allowLate;
 
-    MockGatewayController(VnpaySigner signer, RestClient.Builder builder, Clock clock,
-                          @Value("${payment.mock.ipn-url}") String ipnUrl, @Value("${payment.mock.ipn-delay}") Duration ipnDelay,
-                          @Value("${payment.mock.ipn-drop-rate}") double ipnDropRate, @Value("${payment.mock.allow-late}") boolean allowLate) {
+    MockGatewayController(VnpaySigner signer, MockBank bank, MockIpnSender ipn, MockFaults faults, Dice dice, Clock clock,
+                          @Value("${payment.mock.allow-late}") boolean allowLate) {
         this.signer = signer;
-        this.http = builder.build();
+        this.bank = bank;
+        this.ipn = ipn;
+        this.faults = faults;
+        this.dice = dice;
         this.clock = clock;
-        this.ipnUrl = ipnUrl;
-        this.ipnDelay = ipnDelay;
-        this.ipnDropRate = ipnDropRate;
         this.allowLate = allowLate;
     }
 
-    /** Trang "ngân hàng": kiểm chữ ký merchant như VNPay, hiện số tiền + nút kết quả. */
+    /** Trang "ngân hàng": kiểm chữ ký merchant như VNPay, ghi nhận giao dịch (OPEN), hiện số tiền + nút kết quả. */
     @GetMapping(produces = MediaType.TEXT_HTML_VALUE)
     ResponseEntity<String> page(@RequestParam Map<String, String> params) {
         if (!signer.verify(params)) {
             return html(HttpStatus.BAD_REQUEST, "Sai chữ ký", "<p>Yêu cầu thanh toán không hợp lệ (sai chữ ký merchant).</p>");
         }
-        boolean expired = isExpired(params);
         long amount = Long.parseLong(params.get("vnp_Amount")) / 100;
+        bank.open(params.get("vnp_TxnRef"), amount, params.get("vnp_OrderInfo"), params.get("vnp_BankCode"),
+                params.get("vnp_ReturnUrl"), params.get("vnp_CreateDate"), expireAt(params));
+        var txn = bank.find(params.get("vnp_TxnRef")).orElseThrow();
+        boolean expired = clock.instant().isAfter(txn.expireAt());
         String q = HtmlUtils.htmlEscape(VnpaySigner.canonical(params) + "&" + VnpaySigner.HASH + "=" + params.get(VnpaySigner.HASH));
-        StringBuilder body = new StringBuilder()
-                .append("<p class=\"warn\">CỔNG GIẢ LẬP – không trừ tiền thật</p>")
-                .append("<dl><dt>Đơn hàng</dt><dd>").append(esc(params.get("vnp_OrderInfo"))).append("</dd>")
-                .append("<dt>Mã giao dịch merchant</dt><dd>").append(esc(params.get("vnp_TxnRef"))).append("</dd>")
-                .append("<dt>Phương thức</dt><dd>").append(esc(params.get("vnp_BankCode"))).append("</dd>")
+        var active = ipn.activeFaults();
+        StringBuilder b = new StringBuilder()
+                .append("<p class=\"warn\">CỔNG GIẢ LẬP – không trừ tiền thật</p>");
+        if (!active.isEmpty() || faults.bankPendingRate() > 0) {
+            b.append("<p class=\"faults\">Lỗi giả lập đang bật: ").append(esc(String.join(", ", active)))
+                    .append(faults.bankPendingRate() > 0 ? (active.isEmpty() ? "" : ", ") + "bank-pending" : "").append("</p>");
+        }
+        b.append("<dl><dt>Đơn hàng</dt><dd>").append(esc(txn.orderInfo())).append("</dd>")
+                .append("<dt>Mã giao dịch merchant</dt><dd>").append(esc(txn.txnRef())).append("</dd>")
+                .append("<dt>Phương thức</dt><dd>").append(esc(txn.bankCode())).append("</dd>")
                 .append("<dt>Số tiền</dt><dd class=\"amt\">").append(String.format("%,d", amount).replace(',', '.')).append(" đ</dd></dl>")
                 .append("<form method=\"post\"><input type=\"hidden\" name=\"q\" value=\"").append(q).append("\">");
-        if (expired) {
-            body.append("<p class=\"err\">Giao dịch đã quá hạn (vnp_ExpireDate).</p>");
+        if (!"OPEN".equals(txn.status())) {
+            b.append("<p class=\"err\">Giao dịch đã có kết quả (").append(esc(txn.status())).append(").</p>")
+                    .append("<button name=\"action\" value=\"back\">Quay lại cửa hàng</button>");
+        } else if (expired) {
+            b.append("<p class=\"err\">Giao dịch đã quá hạn (vnp_ExpireDate).</p>");
             if (allowLate) {
-                body.append("<button name=\"action\" value=\"success\" class=\"ok\">Vẫn thanh toán (mô phỏng IPN đến trễ)</button>");
+                b.append("<button name=\"action\" value=\"success\" class=\"ok\">Vẫn thanh toán (mô phỏng IPN đến trễ)</button>");
             }
-            body.append("<button name=\"action\" value=\"cancel\">Quay lại cửa hàng</button>");
+            b.append("<button name=\"action\" value=\"cancel\">Quay lại cửa hàng</button>");
         } else {
-            body.append("<button name=\"action\" value=\"success\" class=\"ok\">Thanh toán thành công</button>")
-                .append("<button name=\"action\" value=\"fail\">Thanh toán thất bại (không đủ số dư)</button>")
-                .append("<button name=\"action\" value=\"cancel\">Huỷ giao dịch</button>");
+            b.append("<button name=\"action\" value=\"success\" class=\"ok\">Thanh toán thành công</button>")
+                    .append("<button name=\"action\" value=\"fail\">Thanh toán thất bại (không đủ số dư)</button>")
+                    .append("<button name=\"action\" value=\"cancel\">Huỷ giao dịch</button>");
         }
-        body.append("</form>");
-        return html(HttpStatus.OK, "Ngân hàng giả lập", body.toString());
+        b.append("</form>");
+        return html(HttpStatus.OK, "Ngân hàng giả lập", b.toString());
     }
 
-    /** Khách bấm kết quả → gửi IPN (server→server) rồi đưa trình duyệt về return URL – đúng thứ tự VNPay. */
+    /**
+     * Khách bấm kết quả → ngân hàng chốt giao dịch → lên kế hoạch IPN (happy case + lỗi đang bật, hàng đợi bền) → đưa
+     * trình duyệt về return URL. Lỗi "bank-pending": ngân hàng xử lý chậm, IPN gửi khi {@link MockBankSettler} xử lý xong.
+     */
     @PostMapping(consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
     ResponseEntity<String> pay(@RequestParam("q") String q, @RequestParam("action") String action) {
         Map<String, String> req = parse(q);
         if (!signer.verify(req)) {
             return html(HttpStatus.BAD_REQUEST, "Sai chữ ký", "<p>Yêu cầu không hợp lệ.</p>");
         }
-        if (isExpired(req) && !(allowLate && "success".equals(action))) {
-            action = "cancel";
+        var txn = bank.find(req.get("vnp_TxnRef")).orElse(null);
+        if (txn == null) {
+            return html(HttpStatus.BAD_REQUEST, "Không thấy giao dịch", "<p>Hãy mở lại trang thanh toán.</p>");
         }
-        String rc = switch (action) {
-            case "success" -> "00";
-            case "fail" -> "51";      // VNPay: tài khoản không đủ số dư
-            default -> "24";          // VNPay: khách huỷ giao dịch
-        };
-        Map<String, String> res = new LinkedHashMap<>();
-        res.put("vnp_TmnCode", req.get("vnp_TmnCode"));
-        res.put("vnp_Amount", req.get("vnp_Amount"));
-        res.put("vnp_BankCode", req.get("vnp_BankCode"));
-        res.put("vnp_CardType", "ATM");
-        res.put("vnp_OrderInfo", req.get("vnp_OrderInfo"));
-        res.put("vnp_PayDate", PaymentService.VNP_TIME.format(clock.instant()));
-        res.put("vnp_ResponseCode", rc);
-        res.put("vnp_TransactionNo", Long.toString(ThreadLocalRandom.current().nextLong(10_000_000L, 99_999_999L)));
-        res.put("vnp_TransactionStatus", "00".equals(rc) ? "00" : "02");
-        res.put("vnp_TxnRef", req.get("vnp_TxnRef"));
-        String signed = signer.signedQuery(res);
-
-        sendIpn(signed);   // VNPay gửi IPN cho cả thành công, thất bại lẫn khách huỷ
-        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(req.get("vnp_ReturnUrl") + "?" + signed)).build();
-    }
-
-    private void sendIpn(String signedQuery) {
-        if (ThreadLocalRandom.current().nextDouble() < ipnDropRate) {
-            log.warn("GIẢ LẬP: bỏ IPN (ipn-drop-rate={}) – cần đối soát để phát hiện", ipnDropRate);
-            return;
-        }
-        Runnable call = () -> {
-            try {
-                String r = http.get().uri(URI.create(ipnUrl + "?" + signedQuery)).retrieve().body(String.class);
-                log.info("GIẢ LẬP: IPN → {}", r);
-            } catch (Exception e) {
-                log.warn("GIẢ LẬP: gửi IPN lỗi: {}", e.toString());   // VNPay thật sẽ gửi lại theo lịch; giả lập: đối soát (PAY-1b)
+        if ("OPEN".equals(txn.status())) {
+            boolean expired = clock.instant().isAfter(txn.expireAt());
+            if (expired && !(allowLate && "success".equals(action))) {
+                action = "cancel";
             }
-        };
-        if (ipnDelay.isZero()) {
-            call.run();   // IPN tới TRƯỚC khi trình duyệt về → UI thấy kết quả ngay
-        } else {
-            CompletableFuture.runAsync(call, CompletableFuture.delayedExecutor(ipnDelay.toMillis(), TimeUnit.MILLISECONDS));
+            String now = PaymentService.VNP_TIME.format(clock.instant());
+            String txnNo = Long.toString(ThreadLocalRandom.current().nextLong(10_000_000L, 99_999_999L));
+            boolean pending = "success".equals(action) && dice.roll(faults.bankPendingRate());
+            boolean changed = switch (action) {
+                case "success" -> pending
+                        ? bank.finish(txn.txnRef(), "PROCESSING", null, txnNo, now, clock.instant().plus(faults.bankPendingDuration()))
+                        : bank.finish(txn.txnRef(), "SUCCESS", "00", txnNo, now, null);
+                case "fail" -> bank.finish(txn.txnRef(), "FAILED", "51", txnNo, now, null);       // không đủ số dư
+                default -> bank.finish(txn.txnRef(), "CANCELLED", "24", null, now, null);          // khách huỷ
+            };
+            if (changed && pending) {
+                log.warn("GIẢ LẬP bank-pending: {} đang xử lý {}s", txn.txnRef(), faults.bankPendingDuration().toSeconds());
+            } else if (changed) {
+                ipn.plan(txn.txnRef());   // VNPay gửi IPN cho cả thành công, thất bại lẫn huỷ
+            }
+            txn = bank.find(txn.txnRef()).orElseThrow();
         }
+        String back = signer.signedQuery(ipn.result(txn));
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(txn.returnUrl() + "?" + back)).build();
     }
 
-    private boolean isExpired(Map<String, String> p) {
+    private static Instant expireAt(Map<String, String> p) {
         String exp = p.get("vnp_ExpireDate");
-        if (exp == null) {
-            return false;
-        }
-        Instant e = LocalDateTime.parse(exp, PaymentService.VNP_TIME).atZone(PaymentService.VNP_TIME.getZone()).toInstant();
-        return clock.instant().isAfter(e);
+        return exp == null ? Instant.MAX
+                : LocalDateTime.parse(exp, PaymentService.VNP_TIME).atZone(PaymentService.VNP_TIME.getZone()).toInstant();
     }
 
     private static Map<String, String> parse(String q) {
@@ -174,7 +167,7 @@ class MockGatewayController {
                 body{margin:0;font-family:system-ui,sans-serif;background:#0B3D91;color:#111827;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:16px}
                 main{background:#fff;border-radius:14px;max-width:440px;width:100%%;padding:28px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
                 h1{margin:0 0 12px;font-size:20px}.warn{background:#FEF3C7;color:#92400E;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600}
-                .err{color:#B91C1C;font-weight:600}dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:14px}dt{color:#4B5563}dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+                .err{color:#B91C1C;font-weight:600}.faults{background:#FEE2E2;color:#991B1B;padding:8px 12px;border-radius:8px;font-size:13px}dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:14px}dt{color:#4B5563}dd{margin:0;font-weight:600;overflow-wrap:anywhere}
                 .amt{font-size:22px;color:#0B3D91}form{display:flex;flex-direction:column;gap:10px;margin-top:18px}
                 button{height:46px;border-radius:10px;border:1px solid #D1D5DB;background:#fff;font:inherit;font-weight:600;cursor:pointer}
                 button.ok{background:#0B3D91;color:#fff;border:0}
