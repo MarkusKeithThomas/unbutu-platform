@@ -10,13 +10,15 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ## Đang mở
 
-### OBS-5 · S1: dashboard RED + SLO + alert · TODO (OBS-2, OBS-4 đã xong) · Claude + người dùng
-- Dashboard RED (rate, errors, duration) cho từng service + JVM. SLO: 99% request < 300 ms.
-- Alert: error rate > 5% hoặc service down → Telegram. **Kiểm chứng:** kênh webhook của SigNoz gửi thẳng Telegram Bot API được
-  không, hay cần cầu nối. Token bot để trên AWS (ADR-0004), không đưa vào git.
-- Dashboard/alert lưu dạng JSON trong repo (`deploy/signoz/dashboards/`) để review được.
-  Đã có `host-metrics.json` + `container-metrics.json` (đã import, có data). Còn thiếu: RED theo service (có sẵn `http.server.request.duration` của từng service), SLO, alert.
-- **Xong khi:** gây lỗi thử (vd. tắt catalog) → nhận được tin Telegram; đánh dấu `[x]` S1 ở ARCHITECTURE §8 + ADR.
+### OBS-5 · S1: dashboard RED + SLO + alert (= LT-1) · DOING · Claude + người dùng
+- [x] Dashboard `deploy/signoz/dashboards/service-red.json` (RED, p99 + vạch SLO 300 ms, route, JVM, HikariCP, Kafka lag) – chờ import + soát trên UI.
+- Alert → Telegram: **đã chốt 2026-11-22 cầu nối nhỏ** `signoz-alert-relay` (SigNoz chỉ có Webhook kiểu Alertmanager).
+  Token ở AWS `unbutu/prod/alert-relay`. Các bước: runbook `signoz.md` §Alert. Còn lại theo thứ tự:
+  (1) người dùng tạo bot + secret; (2) PR pro-ticket-workload `alert-relay` (commit sẵn ở nhánh `feat/alert-relay`, chưa push) → merge + apply;
+  (3) chép cấu hình + `render-env.sh` + `up alert-relay`; (4) kênh webhook + 3 rule trên UI → export JSON vào `deploy/signoz/alerts/`.
+- SLO: 300 ms không trùng mốc bucket (0,25 / 0,5 s) → p99 nội suy; đủ cho alert. Muốn đo đúng thì thêm mốc 0,3 qua view OTel.
+- Ghi nhận: service đang chạy **Serial GC** (`MarkSweepCompact`, container thấy ít CPU) → xem lại khi load test.
+- **Xong khi:** tắt catalog → nhận tin Telegram, bật lại → RESOLVED; đánh dấu `[x]` S1 ở ARCHITECTURE §8 + ADR.
 
 ### OBS-6 · Quyền xem cho `developer` · BLOCKED (làm cùng phân quyền §7) · người dùng + Claude
 - User SigNoz role **Viewer**. Kiểm chứng bản Community có những role nào.
