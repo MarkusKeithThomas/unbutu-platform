@@ -1,7 +1,9 @@
 package com.unbutu.ticket.catalog;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -21,11 +23,15 @@ class EventApiIntegrationTest {
     MockMvc mvc;
 
     @Test
-    void listsSeededEventsNewestFirst() throws Exception {
+    void listsUpcomingOnSaleEventsSoonestFirst() throws Exception {
+        // Seed: concert (sớm nhất có vé đang bán) + sport; phim chỉ có hạng vé nháp → ẩn.
         mvc.perform(get("/api/catalog/events"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(3)))
-                .andExpect(jsonPath("$[0].type").value("SPORT"));
+                .andExpect(header().string("Cache-Control", containsString("public")))
+                .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.items[0].type").value("CONCERT"))
+                .andExpect(jsonPath("$.items[0].priceFrom").value(500000))
+                .andExpect(jsonPath("$.hasNext").value(false));
     }
 
     @Test

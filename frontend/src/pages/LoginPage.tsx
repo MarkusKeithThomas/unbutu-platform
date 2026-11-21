@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorMessage, GOOGLE_LOGIN_URL } from '../api';
+import { takeReturnTo } from '../returnTo';
 import { useAuth } from '../auth';
 import { AuthLayout, GoogleButton, PasswordInput } from '../AuthLayout';
 
@@ -35,7 +36,7 @@ export function LoginPage() {
     setBusy('pw');
     try {
       await login(email.trim(), password, remember);
-      navigate('/', { replace: true, state: { via: 'password' } });
+      navigate(takeReturnTo(), { replace: true });
     } catch (err) {
       setFormError(errorMessage(err));
       setBusy('');

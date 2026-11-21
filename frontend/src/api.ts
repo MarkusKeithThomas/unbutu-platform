@@ -77,6 +77,7 @@ export type TicketType = {
   eventId: string;
   eventTitle: string;
   name: string;
+  description: string | null;
   price: number; // VND
   totalQuantity: number;
   status: TicketStatus;
@@ -84,12 +85,24 @@ export type TicketType = {
   deletable: boolean;
   updatedAt: string;
 };
-export type TicketTypeInput = Pick<TicketType, 'eventId' | 'name' | 'price' | 'totalQuantity' | 'status'>;
+export type TicketTypeInput = Pick<TicketType, 'eventId' | 'name' | 'description' | 'price' | 'totalQuantity' | 'status'>;
+
+/** Thẻ sự kiện trên trang danh sách (khách). */
+export type EventSummary = Pick<CatalogEvent, 'id' | 'title' | 'type' | 'venue' | 'startsAt'> & { priceFrom: number };
+export type Slice<T> = { items: T[]; page: number; size: number; hasNext: boolean };
+/** Hạng vé khách thấy (ON_SALE | PAUSED). */
+export type PublicTicketType = Pick<TicketType, 'id' | 'name' | 'description' | 'price' | 'totalQuantity' | 'status'>;
 
 const json = (method: string, body?: unknown): RequestInit => ({ method, body: body === undefined ? undefined : JSON.stringify(body) });
 
 export const catalog = {
-  events: () => request<CatalogEvent[]>('/api/catalog/events'),
+  // Công khai – KHÔNG gửi token (response giống nhau cho mọi người → CDN cache được).
+  browse: (page: number, size = 12) => request<Slice<EventSummary>>(`/api/catalog/events?page=${page}&size=${size}`),
+  event: (id: string) => request<CatalogEvent>(`/api/catalog/events/${id}`),
+  eventTicketTypes: (id: string) => request<PublicTicketType[]>(`/api/catalog/events/${id}/ticket-types`),
+
+  // Admin
+  events: (t: string) => request<CatalogEvent[]>('/api/catalog/admin/events', {}, t),
   createEvent: (t: string, e: EventInput) => request<CatalogEvent>('/api/catalog/admin/events', json('POST', e), t),
   updateEvent: (t: string, id: string, e: EventInput) => request<CatalogEvent>(`/api/catalog/admin/events/${id}`, json('PUT', e), t),
   deleteEvent: (t: string, id: string) => request<void>(`/api/catalog/admin/events/${id}`, json('DELETE'), t),
@@ -116,7 +129,7 @@ export function errorMessage(e: unknown): string {
       case 'TICKET_TYPE_NAME_TAKEN': return 'Sự kiện này đã có hạng vé cùng tên.';
       case 'TICKET_TYPE_ALREADY_PUBLISHED': return e.message;
       case 'EVENT_HAS_TICKET_TYPES': return 'Sự kiện còn hạng vé – hãy xoá các hạng vé trước.';
-      case 'EVENT_NOT_FOUND': return 'Sự kiện không còn tồn tại. Hãy tải lại trang.';
+      case 'EVENT_NOT_FOUND': return 'Sự kiện không tồn tại hoặc đã bị gỡ.';
       case 'TICKET_TYPE_NOT_FOUND': return 'Hạng vé không còn tồn tại. Hãy tải lại trang.';
       case 'CONFLICT': return 'Dữ liệu vừa bị thay đổi, hãy tải lại trang.';
     }

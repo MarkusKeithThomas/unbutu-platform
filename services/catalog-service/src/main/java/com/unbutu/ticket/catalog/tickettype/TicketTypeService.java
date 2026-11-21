@@ -5,7 +5,6 @@ import com.unbutu.ticket.catalog.event.EventRepository;
 import com.unbutu.ticket.catalog.event.EventService;
 import com.unbutu.ticket.catalog.web.CatalogException;
 import java.time.Clock;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -27,8 +26,7 @@ public class TicketTypeService {
 
     @Transactional(readOnly = true)
     public List<TicketTypeResponse.Public> listVisible(UUID eventId) {
-        return ticketTypes.findByEventIdAndStatusInOrderByPriceDesc(eventId,
-                        EnumSet.of(TicketType.Status.ON_SALE, TicketType.Status.PAUSED))
+        return ticketTypes.findByEventIdAndStatusInOrderByPriceDesc(eventId, TicketType.VISIBLE)
                 .stream().map(TicketTypeResponse.Public::from).toList();
     }
 

@@ -25,17 +25,18 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | Method | Đường dẫn | Ghi chú |
 |---|---|---|
 | GET | `/api/catalog/ping` | Kiểm tra sống (smoke test của deploy) |
-| GET | `/api/catalog/events` | Danh sách sự kiện (prod rỗng; local có dữ liệu mẫu) |
-| GET | `/api/catalog/events/{id}` | Chi tiết sự kiện |
-| GET | `/api/catalog/events/{id}/ticket-types` | Hạng vé đang bán / tạm dừng của sự kiện (không lộ bản nháp) |
-| POST · PUT · DELETE | `/api/catalog/admin/events[/{id}]` | Tạo / sửa / xoá sự kiện – **ADMIN** (xoá được khi chưa có hạng vé) |
+| GET | `/api/catalog/events?page=&size=` | Khách: sự kiện sắp diễn ra đang mở bán + `priceFrom`, `{items, page, size, hasNext}` (size ≤ 50, không COUNT). `Cache-Control: public, max-age=30` |
+| GET | `/api/catalog/events/{id}` | Chi tiết sự kiện (cache 30 s) |
+| GET | `/api/catalog/events/{id}/ticket-types` | Hạng vé đang bán / tạm dừng của sự kiện, có mô tả (không lộ bản nháp, cache 30 s) |
+| GET · POST · PUT · DELETE | `/api/catalog/admin/events[/{id}]` | Danh sách đầy đủ / tạo / sửa / xoá sự kiện – **ADMIN** (xoá được khi chưa có hạng vé) |
 | GET · POST · PUT · DELETE | `/api/catalog/admin/ticket-types[/{id}]` | CRUD hạng vé – **ADMIN**. Đã từng mở bán → không xoá hẳn / không về Nháp (409) |
 | POST | `/api/identity/register` · `/login` · `/refresh` · `/logout` | Đăng ký / đăng nhập email+mật khẩu; refresh token trong cookie HttpOnly |
 | GET | `/api/identity/me` | Hồ sơ (cần `Authorization: Bearer`) |
 | GET | `/api/identity/providers` | Cách đăng nhập đang bật (`google: true/false`) |
 | GET | `/api/identity/oauth2/authorization/google` | Bắt đầu login Google (redirect) |
 | GET | `/admin/events`, `/admin/ticket-types` | UI quản trị (chỉ ADMIN) |
-| GET | `/`, `/login`, `/register` | UI (container `frontend`, gateway route mọi path không phải `/api/**`) |
+| GET | `/`, `/events/{id}` | UI khách: danh sách sự kiện, chọn vé (tối đa 4 vé/đơn) – không cần đăng nhập |
+| GET | `/login`, `/register` | UI (container `frontend`, gateway route mọi path không phải `/api/**`) |
 
 ## Công nghệ
 Java 21 · Spring Boot 4.1 · Spring Cloud Gateway 5 (WebFlux) · PostgreSQL 17 + Flyway · Gradle Kotlin DSL ·
