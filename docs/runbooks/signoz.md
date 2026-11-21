@@ -79,12 +79,30 @@ Nếu không thấy log: `sudo docker logs signoz-ingester 2>&1 | tail -50` (l�
 |---|---|
 | `host-metrics.json` | CPU, RAM, load, disk IO, filesystem của `unbutu` (không có network – xem nợ kỹ thuật trong `docs/tasks/observability.md`) |
 | `container-metrics.json` | CPU%, RAM%, RAM/limit, network, block IO từng container, nhóm theo `compose.project/compose.service` |
+| `service-red.json` | RED theo service (rate, 5xx %, p95, p99 + vạch SLO 300 ms, bảng theo route), JVM (heap, CPU, GC, thread), HikariCP, Kafka lag. Bỏ `/actuator`. Biến `service.name` (nhiều lựa chọn). OBS-5 |
 
 Gốc: `SigNoz/dashboards` (bản `v1`, định dạng query builder v5), đã chỉnh cho dữ liệu của server này. Import (admin, trên UI):
 Dashboards → **New dashboard → Import JSON** → chọn file → **Import**. Sửa trên UI xong thì Export JSON → ghi đè file trong repo → PR,
 để dashboard luôn được review như code.
 **Bẫy:** dashboard mẫu của SigNoz có thể lưu sẵn giá trị biến (vd. `host.name = testingapp-server`), khiến panel trống mà không báo lỗi.
 Trước khi commit, kiểm tra `variables.*.selectedValue/defaultValue` = `unbutu`. Chẩn đoán panel trống: đọc query thật trong `system.query_log` của ClickHouse.
+
+## Alert (OBS-5) – chỉ hiện trên UI SigNoz
+Đã chốt 2026-11-22: **không gửi ra ngoài** (không Telegram/email). Alert firing/resolved xem ở SigNoz → **Alerts** (tab Triggered / History).
+Muốn gửi ra ngoài sau này: SigNoz chỉ có kênh Webhook (payload Alertmanager) → cần cầu nối nhỏ cho Telegram (bản nháp ở PR #43, commit đầu).
+
+### Alert rule (Alerts → New Alert → Metrics, không chọn kênh)
+| Tên | Query | Điều kiện | Mức |
+|---|---|---|---|
+| `Lỗi 5xx > 5%` | A = `http.server.request.duration.count` rate/sum, B = như A + `http.response.status_code LIKE '5%'`, cả hai lọc `http.route NOT LIKE '/actuator%'`, group by `service.name`; công thức `B*100/A` | > 5, **all the times** trong 5 phút | critical |
+| `Service mất tín hiệu` | `jvm.cpu.recent_utilization` avg/avg, group by `service.name` | "Notify when data is missing" 3 phút | critical |
+| `p99 > 300 ms (SLO)` | `http.server.request.duration.bucket` p99, lọc `/actuator` như trên, group by `service.name` | > 0.3, **all the times** trong 10 phút | warning |
+
+Summary: `{{$labels.service.name}} = {{$value}}`. Sửa trên UI xong → Export JSON → `deploy/signoz/alerts/<tên>.json` → PR.
+
+### Kiểm chứng (diễn tập)
+`ssh unbutu 'docker stop prod-catalog-service-1'` → trong ~5 phút SigNoz → Alerts có `Service mất tín hiệu` firing (và `Lỗi 5xx`
+ở api-gateway nếu có request vào `/api/catalog`) → `docker start prod-catalog-service-1` → resolved trong History.
 
 ## Đổi cấu hình ClickHouse / collector
 Sửa file mount (`deploy/signoz/clickhouse/*.yaml`, `ingester/*.yaml`) **không** làm compose tạo lại container.
