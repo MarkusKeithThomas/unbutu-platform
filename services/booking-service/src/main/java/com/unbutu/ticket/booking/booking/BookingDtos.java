@@ -1,7 +1,10 @@
 package com.unbutu.ticket.booking.booking;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -19,6 +22,16 @@ public final class BookingDtos {
     public record CreateBookingRequest(@NotNull UUID eventId, @NotEmpty @Size(max = 4) List<@Valid Item> items) {
         public record Item(@NotNull UUID ticketTypeId, @Min(1) @Max(4) int quantity) {
         }
+    }
+
+    /** A10 – bước 2: thông tin người mua + phương thức → URL cổng thanh toán. Bấm lại → cùng URL (payment idempotent). */
+    public record CheckoutRequest(@NotNull @Pattern(regexp = "VNBANK|VNPAYQR|INTCARD") String method, @NotNull @Valid Buyer buyer) {
+        public record Buyer(@NotBlank @Size(max = 100) String name, @NotBlank @Email @Size(max = 255) String email,
+                            @Pattern(regexp = "^$|^[0-9+ ]{8,20}$") String phone) {
+        }
+    }
+
+    public record CheckoutResponse(String paymentUrl) {
     }
 
     public record EventView(UUID id, String title, String venue, Instant startsAt) {

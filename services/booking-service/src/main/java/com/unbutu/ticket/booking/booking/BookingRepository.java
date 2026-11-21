@@ -107,28 +107,72 @@ class BookingRepository {
                 .list().stream().collect(Collectors.groupingBy(ItemRow::bookingId));
     }
 
+    Optional<Row> findById(UUID id) {
+        return jdbc.sql("select " + COLS + " from bookings where id = :id").param("id", id).query((rs, i) -> map(rs)).optional();
+    }
+
+    /** Bước 2 → cổng: lưu người mua + phương thức, PENDING → AWAITING_PAYMENT (bấm lại khi đang chờ: cập nhật). Còn hạn mới được. */
+    boolean startPayment(UUID id, UUID userId, String name, String email, String phone, String method) {
+        return jdbc.sql("""
+                        update bookings set status = 'AWAITING_PAYMENT', buyer_name = :n, buyer_email = :e, buyer_phone = :p,
+                               payment_method = :m, updated_at = now()
+                        where id = :id and user_id = :u and status in ('PENDING', 'AWAITING_PAYMENT') and expires_at > now()""")
+                .param("n", name).param("e", email).param("p", phone).param("m", method).param("id", id).param("u", userId)
+                .update() == 1;
+    }
+
+    /** Thanh toán thất bại / khách huỷ ở cổng → cho thanh toán lại (nếu còn hạn, job hết hạn lo phần còn lại). */
+    void backToPending(UUID id) {
+        jdbc.sql("update bookings set status = 'PENDING', updated_at = now() where id = :id and status = 'AWAITING_PAYMENT'")
+                .param("id", id).update();
+    }
+
+    /** Đã thu tiền + đã chốt vé ở inventory. Nhận cả đơn đã EXPIRED/CANCELLED (trả muộn mà vẫn còn vé). */
+    boolean confirm(UUID id) {
+        return jdbc.sql("""
+                        update bookings set status = 'CONFIRMED', confirmed_at = now(), updated_at = now()
+                        where id = :id and status in ('PENDING', 'AWAITING_PAYMENT', 'EXPIRED', 'CANCELLED')""")
+                .param("id", id).update() == 1;
+    }
+
+    void refundPending(UUID id, String reason) {
+        jdbc.sql("""
+                        update bookings set status = 'REFUND_PENDING', cancel_reason = :r, updated_at = now()
+                        where id = :id and status in ('PENDING', 'AWAITING_PAYMENT', 'EXPIRED', 'CANCELLED')""")
+                .param("r", reason).param("id", id).update();
+    }
+
+    void refunded(UUID id) {
+        jdbc.sql("update bookings set status = 'REFUNDED', updated_at = now() where id = :id and status = 'REFUND_PENDING'")
+                .param("id", id).update();
+    }
+
     void setExpiresAt(UUID id, Instant expiresAt) {
         jdbc.sql("update bookings set expires_at = :exp, updated_at = now() where id = :id and status = 'PENDING'")
                 .param("exp", Timestamp.from(expiresAt)).param("id", id).update();
     }
 
-    /** PENDING → CANCELLED. true nếu đổi được (chạy lại / đã ở trạng thái khác → false). */
+    /** PENDING/AWAITING_PAYMENT → CANCELLED. true nếu đổi được. Lỡ trả tiền sau khi huỷ → quyết toán xử lý như trả muộn. */
     boolean cancelPending(UUID id, String reason) {
         return jdbc.sql("""
                         update bookings set status = 'CANCELLED', cancel_reason = :r, updated_at = now()
-                        where id = :id and status = 'PENDING'""")
+                        where id = :id and status in ('PENDING', 'AWAITING_PAYMENT')""")
                 .param("r", reason).param("id", id).update() == 1;
     }
 
-    /** PENDING quá hạn → EXPIRED, theo lô. SKIP LOCKED: nhiều instance chạy job cùng lúc không tranh nhau. */
-    List<Expired> expireDue(int limit) {
+    /**
+     * Quá hạn → EXPIRED, theo lô. SKIP LOCKED: nhiều instance chạy job cùng lúc không tranh nhau.
+     * AWAITING_PAYMENT có thêm ân hạn (khách đang ở trang ngân hàng / IPN đang tới).
+     */
+    List<Expired> expireDue(int limit, java.time.Duration paymentGrace) {
         return jdbc.sql("""
                         update bookings set status = 'EXPIRED', updated_at = now()
                         where id in (select id from bookings
-                                     where status = 'PENDING' and expires_at < now()
+                                     where (status = 'PENDING' and expires_at < now())
+                                        or (status = 'AWAITING_PAYMENT' and expires_at < now() - make_interval(secs => :grace))
                                      order by expires_at limit :lim for update skip locked)
                         returning id, event_id""")
-                .param("lim", limit)
+                .param("lim", limit).param("grace", paymentGrace.toSeconds())
                 .query((rs, i) -> new Expired(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class)))
                 .list();
     }

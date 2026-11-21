@@ -23,6 +23,8 @@ booking:
     jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:unbutu-identity}
   inventory-url: ${INVENTORY_SERVICE_URL:http://inventory-service:8080}
+  payment-url: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
+  payment-grace: 5m                   # đơn đang ở cổng thanh toán: chờ thêm 5′ sau hạn giữ rồi mới EXPIRED
   hold-ttl: 10m
   max-tickets-per-user-event: 4
   service-fee-per-ticket: 10000       # VND

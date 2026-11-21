@@ -42,17 +42,27 @@ export FRONTEND_IMAGE=frontend:ci APP_VERSION=ci
 
 # ---------- 2. env/<service>.env – cùng tên biến với env-map prod ----------
 rand() { openssl rand -hex 16; }
-DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand); DB_BOOKING=$(rand)
+DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand); DB_BOOKING=$(rand); DB_PAYMENT=$(rand)
 JWT_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER 2>/dev/null | base64 | tr -d '\n')
 mkdir -p deploy/env
 cat >deploy/env/postgres.env <<ENV
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$(rand)
-SERVICE_DATABASES=catalog identity inventory booking
+SERVICE_DATABASES=catalog identity inventory booking payment
 CATALOG_DB_PASSWORD=$DB_CATALOG
 IDENTITY_DB_PASSWORD=$DB_IDENTITY
 INVENTORY_DB_PASSWORD=$DB_INVENTORY
 BOOKING_DB_PASSWORD=$DB_BOOKING
+PAYMENT_DB_PASSWORD=$DB_PAYMENT
+ENV
+cat >deploy/env/payment-service.env <<ENV
+ENVIRONMENT=prod
+DB_URL=jdbc:postgresql://postgres:5432/payment_db
+DB_USERNAME=payment
+DB_PASSWORD=$DB_PAYMENT
+PAYMENT_HASH_SECRET=$(rand)$(rand)
+PUBLIC_BASE_URL=http://127.0.0.1:8080
+UI_BASE_URL=http://127.0.0.1:8080
 ENV
 cat >deploy/env/booking-service.env <<ENV
 ENVIRONMENT=prod
@@ -149,6 +159,9 @@ expect "đơn của tôi (có token) → trang rỗng" 200 -H "Authorization: Be
 expect "đơn của tôi không token → 401" 401 "$BASE/api/bookings/me"
 NO_EVENT='{"eventId":"00000000-0000-0000-0000-000000000001","items":[{"ticketTypeId":"00000000-0000-0000-0000-000000000002","quantity":1}]}'
 expect "giữ vé thiếu Idempotency-Key → 400" 400 -H "Authorization: Bearer $ACCESS" "${JSON[@]}" -X POST "$BASE/api/bookings" -d "$NO_EVENT"
+expect "IPN không chữ ký → 200 RspCode 97 (đặc tả VNPay)" 200 "$BASE/api/payments/vnpay/ipn?vnp_TxnRef=x&vnp_Amount=100"
+[[ $(jq -r .RspCode <<<"$BODY") == 97 ]] || fail "IPN sai chữ ký phải trả RspCode 97 – body: ${BODY:0:200}"
+expect "trang cổng giả lập sai chữ ký → 400" 400 "$BASE/api/payments/mock/pay?vnp_TxnRef=x"
 expect "giữ vé hạng không tồn tại → 409" 409 -H "Authorization: Bearer $ACCESS" -H "Idempotency-Key: smoke-key-$RANDOM" "${JSON[@]}" \
     -X POST "$BASE/api/bookings" -d "$NO_EVENT"
 

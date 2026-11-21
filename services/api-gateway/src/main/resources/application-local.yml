@@ -12,5 +12,7 @@ services:
     url: http://localhost:8083
   booking:
     url: http://localhost:8084
+  payment:
+    url: http://localhost:8085
   frontend:
     url: http://localhost:8090

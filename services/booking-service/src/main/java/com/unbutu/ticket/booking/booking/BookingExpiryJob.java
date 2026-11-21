@@ -18,9 +18,12 @@ class BookingExpiryJob {
     private final BookingRepository bookings;
     private final InventoryClient inventory;
 
+    @org.springframework.beans.factory.annotation.Value("${booking.payment-grace:5m}")
+    private java.time.Duration paymentGrace;
+
     @Scheduled(fixedDelayString = "${booking.expiry-interval:5s}")
     void expire() {
-        var expired = bookings.expireDue(500);
+        var expired = bookings.expireDue(500, paymentGrace);
         expired.forEach(e -> inventory.release(e.eventId(), e.id()));
         if (!expired.isEmpty()) {
             log.info("Hết hạn giữ vé: {} đơn → EXPIRED", expired.size());

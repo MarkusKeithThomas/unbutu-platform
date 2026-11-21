@@ -25,6 +25,10 @@ spring:
               uri: ${services.booking.url}
               predicates:
                 - Path=/api/bookings,/api/bookings/**
+            - id: payment
+              uri: ${services.payment.url}
+              predicates:
+                - Path=/api/payments/**
             # UI (SPA, nginx): mọi path còn lại. order lớn → xét SAU các route /api/** ở trên.
             - id: frontend
               uri: ${services.frontend.url}
@@ -43,6 +47,8 @@ services:
     url: ${INVENTORY_SERVICE_URL:http://inventory-service:8080}
   booking:
     url: ${BOOKING_SERVICE_URL:http://booking-service:8080}
+  payment:
+    url: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
   frontend:
     url: ${FRONTEND_SERVICE_URL:http://frontend:8080}
 

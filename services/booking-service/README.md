@@ -22,6 +22,8 @@
 - Thứ tự A9: transaction ngắn (idempotency → `pg_advisory_xact_lock(user, sự kiện)` → giới hạn → giá từ bảng sao chép → INSERT PENDING) → **commit** → gọi inventory **ngoài transaction** (không giữ kết nối DB khi gọi mạng). Hết vé/lỗi → `CANCELLED`.
 - Bảng giá + thông tin sự kiện: consumer `catalog.event.v1` (group `booking-service`), snapshot có version.
 - Hết hạn: `BookingExpiryJob` 5 s – `UPDATE … WHERE id IN (… FOR UPDATE SKIP LOCKED)` → `EXPIRED` + nhả vé (inventory sweeper là lớp dự phòng).
-- Chưa có (PAY-1): `AWAITING_PAYMENT`, `CONFIRMED`, Outbox `booking.*`, chốt vé ở sổ cái inventory.
+- **PAY-1**: `POST /api/bookings/{id}/checkout {method, buyer}` → `AWAITING_PAYMENT` + `paymentUrl` (bấm lại → cùng giao dịch).
+  Nghe `payment.result.v1`: `succeeded` → inventory **chốt vé** (`/internal/.../commit`) → `CONFIRMED`; không còn đủ vé (trả muộn) / sai số tiền → `REFUND_PENDING` → hoàn tiền → `REFUNDED`; `failed` → `PENDING` (thanh toán lại). `AWAITING_PAYMENT` có 5′ ân hạn trước khi `EXPIRED`.
+- Chưa có: Outbox `booking.*` (cho ticketing / notification), đối soát giao dịch treo (PAY-1b).
 
 Xem `ARCHITECTURE.md` §4 để biết quy ước chung.

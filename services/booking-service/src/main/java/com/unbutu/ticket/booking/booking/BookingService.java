@@ -44,19 +44,22 @@ public class BookingService {
     private final BookingRepository bookings;
     private final PriceBook priceBook;
     private final InventoryClient inventory;
+    private final com.unbutu.ticket.booking.payment.PaymentClient payment;
     private final TransactionTemplate tx;
     private final Clock clock;
     private final Duration holdTtl;
     private final int maxPerUserEvent;
     private final long feePerTicket;
 
-    BookingService(BookingRepository bookings, PriceBook priceBook, InventoryClient inventory, TransactionTemplate tx, Clock clock,
+    BookingService(BookingRepository bookings, PriceBook priceBook, InventoryClient inventory,
+                   com.unbutu.ticket.booking.payment.PaymentClient payment, TransactionTemplate tx, Clock clock,
                    @Value("${booking.hold-ttl}") Duration holdTtl,
                    @Value("${booking.max-tickets-per-user-event}") int maxPerUserEvent,
                    @Value("${booking.service-fee-per-ticket}") long feePerTicket) {
         this.bookings = bookings;
         this.priceBook = priceBook;
         this.inventory = inventory;
+        this.payment = payment;
         this.tx = tx;
         this.clock = clock;
         this.holdTtl = holdTtl;
@@ -135,6 +138,24 @@ public class BookingService {
         var rows = bookings.findMine(userId, page, size);
         boolean hasNext = rows.size() > size;
         return new BookingPage(views(hasNext ? rows.subList(0, size) : rows), page, size, hasNext);
+    }
+
+    /**
+     * A10 – "Xác nhận thanh toán": lưu người mua → AWAITING_PAYMENT → payment tạo giao dịch (1 PENDING / đơn,
+     * bấm lại → cùng URL) → trả URL cổng. Hết hạn giữ → 409 HOLD_EXPIRED.
+     */
+    public BookingDtos.CheckoutResponse checkout(UUID userId, UUID bookingId, BookingDtos.CheckoutRequest req, String clientIp) {
+        var row = bookings.findOwned(bookingId, userId).orElseThrow(BookingException::notFound);
+        var buyer = req.buyer();
+        String phone = buyer.phone() == null || buyer.phone().isBlank() ? null : buyer.phone().strip();
+        if (!bookings.startPayment(bookingId, userId, buyer.name().strip(), buyer.email().strip(), phone, req.method())) {
+            if ("CONFIRMED".equals(row.status())) {
+                throw new BookingException(HttpStatus.CONFLICT, "ALREADY_PAID", "Đơn hàng đã được thanh toán");
+            }
+            throw new BookingException(HttpStatus.CONFLICT, "HOLD_EXPIRED", "Đơn đã hết thời gian giữ vé");
+        }
+        String url = payment.createPayment(bookingId, row.code(), row.total(), req.method(), row.expiresAt(), clientIp);
+        return new BookingDtos.CheckoutResponse(url);
     }
 
     /** A13 "← Chọn lại vé": huỷ + nhả vé. Idempotent: đã huỷ/hết hạn → coi như xong. */

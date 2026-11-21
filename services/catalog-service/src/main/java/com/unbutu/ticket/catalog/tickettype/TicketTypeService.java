@@ -3,7 +3,7 @@ package com.unbutu.ticket.catalog.tickettype;
 import com.unbutu.ticket.catalog.event.Event;
 import com.unbutu.ticket.catalog.event.EventRepository;
 import com.unbutu.ticket.catalog.event.EventService;
-import com.unbutu.ticket.catalog.outbox.Outbox;
+import com.unbutu.ticket.outbox.Outbox;
 import com.unbutu.ticket.catalog.web.CatalogException;
 import com.unbutu.ticket.events.catalog.CatalogEvents;
 import java.time.Clock;

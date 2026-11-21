@@ -44,13 +44,37 @@ export function CheckoutPage() {
   }, [load]);
 
   const { left, label } = useCountdown(booking?.expiresAt);
-  const holding = booking?.status === 'PENDING' && left > 0;
+  const holding = (booking?.status === 'PENDING' || booking?.status === 'AWAITING_PAYMENT') && left > 0;
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  const pay = async () => {
+    if (!booking) return;
+    const name = buyer.name.trim();
+    const email = buyer.email.trim();
+    if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      setPayError('Vui lòng nhập họ tên và email hợp lệ để nhận vé.');
+      return;
+    }
+    setPaying(true);
+    setPayError(null);
+    try {
+      const { paymentUrl } = await withToken((t) => bookings.checkout(t, booking.id, method, { name, email, phone: buyer.phone.trim() }));
+      window.location.assign(paymentUrl); // rời SPA sang cổng; cổng đưa về /orders/{id}
+    } catch (e) {
+      setPayError(errorMessage(e));
+      setPaying(false);
+      void load();
+    }
+  };
 
   const backToTickets = async () => {
     if (!booking) return;
     setBusy(true);
     try {
-      if (booking.status === 'PENDING') await withToken((t) => bookings.cancel(t, booking.id)); // nhả vé ngay cho người khác
+      if (booking.status === 'PENDING' || booking.status === 'AWAITING_PAYMENT') {
+        await withToken((t) => bookings.cancel(t, booking.id)); // nhả vé ngay cho người khác
+      }
     } catch {
       /* huỷ lỗi: vé tự trả khi hết hạn */
     }
@@ -122,6 +146,7 @@ export function CheckoutPage() {
               <p>
                 {booking.status === 'CANCELLED' ? 'Đơn hàng đã được huỷ, vé đã trả lại.'
                   : booking.status === 'CONFIRMED' ? 'Đơn hàng đã thanh toán.'
+                  : booking.status === 'REFUND_PENDING' || booking.status === 'REFUNDED' ? 'Đơn hàng đã được hoàn tiền.'
                   : 'Hết thời gian giữ vé – vé đã được trả lại cho người khác.'}
               </p>
               <button type="button" className="btn btn-primary" style={{ padding: '0 20px' }} onClick={() => navigate(`/events/${booking.event.id}`)}>
@@ -143,10 +168,11 @@ export function CheckoutPage() {
           <div className="total"><span>Tổng cộng</span><strong>{vnd(booking.total)}</strong></div>
           {holding && (
             <>
-              <button type="button" className="btn btn-primary" disabled title="Có ở bản cập nhật tới">
-                Xác nhận thanh toán {vnd(booking.total)}
+              {payError && <div className="alert" role="alert">{payError}</div>}
+              <button type="button" className="btn btn-primary" disabled={paying} onClick={() => void pay()}>
+                {paying ? 'Đang chuyển sang cổng thanh toán…' : `Xác nhận thanh toán ${vnd(booking.total)}`}
               </button>
-              <p className="hint">Cổng thanh toán đang được tích hợp – sẽ có ở bản cập nhật tới. Vé vẫn được giữ tới khi hết giờ.</p>
+              <p className="hint">Bấm xác nhận một lần. Hệ thống chống trừ tiền trùng nếu bạn bấm lại.</p>
             </>
           )}
         </aside>

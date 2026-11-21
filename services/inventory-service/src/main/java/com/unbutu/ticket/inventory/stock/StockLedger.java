@@ -46,6 +46,24 @@ public class StockLedger {
                 .query(Integer.class).optional().orElse(0);
     }
 
+    public boolean isCommitted(UUID reservationId) {
+        return jdbc.sql("select 1 from commits where reservation_id = :r").param("r", reservationId)
+                .query(Integer.class).optional().isPresent();
+    }
+
+    public void recordCommit(UUID reservationId, UUID eventId, boolean late) {
+        jdbc.sql("insert into commits (reservation_id, event_id, late) values (:r, :e, :late)")
+                .param("r", reservationId).param("e", eventId).param("late", late).update();
+    }
+
+    /** Chốt bán – CHỐT CHẶN CUỐI chống oversell: chỉ cộng khi sold + qty ≤ tổng. false → không đủ (caller rollback). */
+    public boolean addSold(UUID ticketTypeId, int qty) {
+        return jdbc.sql("""
+                        update stock set sold = sold + :q, updated_at = now()
+                        where ticket_type_id = :tt and not deleted and sold + :q <= total_quantity""")
+                .param("q", qty).param("tt", ticketTypeId).update() == 1;
+    }
+
     /** Hạng vé còn hiệu lực của 1 sự kiện (index ix_stock_event). */
     public List<Row> forEvent(UUID eventId) {
         return jdbc.sql("""

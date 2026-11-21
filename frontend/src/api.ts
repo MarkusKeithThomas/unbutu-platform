@@ -124,7 +124,7 @@ export const inventory = {
 };
 
 // ---- booking: giữ vé 10′ (A9, A11–A13) ----
-export type BookingStatus = 'PENDING' | 'CANCELLED' | 'EXPIRED' | 'AWAITING_PAYMENT' | 'CONFIRMED';
+export type BookingStatus = 'PENDING' | 'CANCELLED' | 'EXPIRED' | 'AWAITING_PAYMENT' | 'CONFIRMED' | 'REFUND_PENDING' | 'REFUNDED';
 export type Booking = {
   id: string;
   code: string;
@@ -146,6 +146,9 @@ export const bookings = {
     request<Booking>('/api/bookings', { ...json('POST', { eventId, items }), headers: { 'Idempotency-Key': idempotencyKey } }, t),
   get: (t: string, id: string) => request<Booking>(`/api/bookings/${id}`, {}, t),
   cancel: (t: string, id: string) => request<void>(`/api/bookings/${id}`, json('DELETE'), t),
+  /** A10 – trả URL cổng thanh toán; bấm lại → cùng URL. */
+  checkout: (t: string, id: string, method: string, buyer: { name: string; email: string; phone: string }) =>
+    request<{ paymentUrl: string }>(`/api/bookings/${id}/checkout`, json('POST', { method, buyer }), t),
 };
 
 /** Bắt đầu login Google: chuyển cả trang sang backend → Google → quay về /auth/callback. */
@@ -172,6 +175,9 @@ export function errorMessage(e: unknown): string {
       case 'INVENTORY_UNAVAILABLE': return 'Hệ thống giữ vé đang bận, vui lòng thử lại sau ít giây.';
       case 'BOOKING_NOT_FOUND': return 'Không tìm thấy đơn hàng.';
       case 'BOOKING_NOT_CANCELLABLE': return 'Đơn hàng không còn huỷ được.';
+      case 'HOLD_EXPIRED': return 'Đã hết thời gian giữ vé. Vui lòng chọn vé lại.';
+      case 'ALREADY_PAID': return 'Đơn hàng này đã được thanh toán.';
+      case 'PAYMENT_UNAVAILABLE': return 'Cổng thanh toán đang bận, vui lòng thử lại.';
     }
     if (e.status === 401) return 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.';
     if (e.status === 403) return 'Bạn không có quyền thực hiện thao tác này.';

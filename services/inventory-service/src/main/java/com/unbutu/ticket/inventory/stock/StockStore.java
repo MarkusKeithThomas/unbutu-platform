@@ -33,6 +33,9 @@ public class StockStore {
     @SuppressWarnings("rawtypes")
     private static final RedisScript<List> RESERVE = script("reserve", List.class);
     private static final RedisScript<Long> RELEASE = script("release", Long.class);
+    @SuppressWarnings("rawtypes")
+    private static final RedisScript<List> COMMIT = script("commit", List.class);
+    private static final RedisScript<Long> COMPENSATE = script("compensate", Long.class);
     private static final RedisScript<Long> INIT_EVENT = script("init_event", Long.class);
     private static final RedisScript<String> UPSERT_TYPE = script("upsert_type", String.class);
     private static final RedisScript<Long> REMOVE_TYPE = script("remove_type", Long.class);
@@ -83,6 +86,34 @@ public class StockStore {
         var keys = new StockKeys(eventId);
         Long n = redis.execute(RELEASE, List.of(keys.avail(), keys.hold(reservationId), keys.holds()), reservationId.toString());
         return n != null && n == 1;
+    }
+
+    /** Kết quả phần Redis của chốt vé: FROM_HOLD / LATE (đã trừ) / SOLD_OUT (không trừ gì). */
+    public record CommitResult(String outcome, UUID ticketTypeId) {
+    }
+
+    public CommitResult commit(UUID eventId, UUID reservationId, Map<UUID, Integer> items) {
+        ensureReady(eventId);
+        var keys = new StockKeys(eventId);
+        List<String> args = new ArrayList<>();
+        args.add(reservationId.toString());
+        items.forEach((tt, q) -> {
+            args.add(tt.toString());
+            args.add(Integer.toString(q));
+        });
+        List<?> r = redis.execute(COMMIT, List.of(keys.avail(), keys.hold(reservationId), keys.holds()), args.toArray());
+        String outcome = (String) r.getFirst();
+        return new CommitResult(outcome, r.size() > 1 ? UUID.fromString((String) r.get(1)) : null);
+    }
+
+    /** Trả lại số Redis đã trừ khi sổ cái từ chối chốt. */
+    public void compensate(UUID eventId, Map<UUID, Integer> items) {
+        List<String> args = new ArrayList<>();
+        items.forEach((tt, q) -> {
+            args.add(tt.toString());
+            args.add(Integer.toString(q));
+        });
+        redis.execute(COMPENSATE, List.of(new StockKeys(eventId).avail()), args.toArray());
     }
 
     /** reservationId đã hết hạn của 1 sự kiện (tối đa limit). */

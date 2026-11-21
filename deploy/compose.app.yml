@@ -124,6 +124,17 @@ services:
       <<: *otel-env
       OTEL_SERVICE_NAME: inventory-service
 
+  # Thanh toán (cổng giả lập giao thức VNPay – PAY-1). Secret: DB_PASSWORD, PAYMENT_HASH_SECRET (AWS, ADR-0004).
+  payment-service:
+    <<: *service
+    image: ${PAYMENT_SERVICE_IMAGE:?Thiếu PAYMENT_SERVICE_IMAGE trong images.env}
+    env_file:
+      - path: env/payment-service.env
+        format: raw
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: payment-service
+
   booking-service:
     <<: *service
     image: ${BOOKING_SERVICE_IMAGE:?Thiếu BOOKING_SERVICE_IMAGE trong images.env}

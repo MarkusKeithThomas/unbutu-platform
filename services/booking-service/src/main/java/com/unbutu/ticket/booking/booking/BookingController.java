@@ -3,6 +3,7 @@ package com.unbutu.ticket.booking.booking;
 import com.unbutu.ticket.booking.booking.BookingDtos.BookingPage;
 import com.unbutu.ticket.booking.booking.BookingDtos.BookingView;
 import com.unbutu.ticket.booking.booking.BookingDtos.CreateBookingRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -42,6 +43,15 @@ class BookingController {
                                        @Valid @RequestBody CreateBookingRequest req) {
         var r = bookings.create(userId(jwt), key, req);
         return ResponseEntity.status(r.created() ? HttpStatus.CREATED : HttpStatus.OK).body(r.booking());
+    }
+
+    /** A10 – sang cổng thanh toán. IP khách (X-Forwarded-For từ Funnel/gateway) gửi cho cổng như VNPay yêu cầu. */
+    @PostMapping("/{id}/checkout")
+    BookingDtos.CheckoutResponse checkout(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                          @Valid @RequestBody BookingDtos.CheckoutRequest req, HttpServletRequest http) {
+        String xff = http.getHeader("X-Forwarded-For");
+        String ip = xff != null && !xff.isBlank() ? xff.split(",")[0].trim() : http.getRemoteAddr();
+        return bookings.checkout(userId(jwt), id, req, ip);
     }
 
     /** A11 – UI poll (đếm ngược, trạng thái). */
