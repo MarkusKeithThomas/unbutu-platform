@@ -329,7 +329,7 @@ Mục tiêu: luyện các kỹ năng senior ngoài CI/CD + log + phân quyền +
 ### Giai đoạn 1 – Ưu tiên cao
 | # | Kỹ năng | Bài tập / tiêu chí hoàn thành | RAM thêm |
 |---|---|---|---|
-| S1 | **Metrics + Alerting** (OTel metrics → SigNoz dashboard + alert) | Dashboard RED (rate, errors, duration) mỗi service + JVM; SLO vd. 99% request < 300 ms; alert error rate > 5% hoặc service down → Telegram (webhook) | 0 (dùng SigNoz) |
+| S1 | **Metrics + Alerting** (OTel metrics → SigNoz dashboard + alert) | Dashboard RED (rate, errors, duration) mỗi service + JVM; SLO vd. 99% request < 300 ms; alert error rate > 5% hoặc service down → hiện trên UI SigNoz (2026-11-22: bỏ Telegram) | 0 (dùng SigNoz) |
 | S2 | **Incident & Postmortem** | Cố ý gây ≥3 sự cố (DB chậm, memory leak, timeout dây chuyền); chỉ dùng SigNoz (log, trace, metrics) để tìm nguyên nhân; viết postmortem blameless + runbook cho từng loại | 0 |
 | S3 | **DB migration zero-downtime** (Flyway, expand/contract) | Migration chạy trong pipeline; đổi tên 1 cột qua 3 lần deploy, không request nào lỗi trong lúc deploy | 0 |
 | S4 | **Giao dịch phân tán** (RabbitMQ, Saga, Outbox) | Luồng đặt vé §4.2.1 (`booking → inventory → payment`) có compensation khi lỗi/hết hạn hold; Outbox không mất event; consumer idempotent; `traceId` đi qua message | ~150 MB |

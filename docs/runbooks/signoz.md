@@ -1,6 +1,6 @@
 # Runbook: dựng / vận hành SigNoz trên `unbutu` (ADR-0006)
 
-Project `observability` **không** đi qua CI/CD: admin chạy tay trên server. Secret AWS duy nhất: token Telegram của `alert-relay` (§Alert).
+Project `observability` **không** đi qua CI/CD: admin chạy tay trên server. Không cần secret nào từ AWS.
 File nguồn: `deploy/compose.observability.yml` + `deploy/signoz/`. Thư mục trên server: `/opt/unbutu-platform/observability`.
 
 ## 0. Điều kiện
@@ -87,31 +87,11 @@ Dashboards → **New dashboard → Import JSON** → chọn file → **Import**.
 **Bẫy:** dashboard mẫu của SigNoz có thể lưu sẵn giá trị biến (vd. `host.name = testingapp-server`), khiến panel trống mà không báo lỗi.
 Trước khi commit, kiểm tra `variables.*.selectedValue/defaultValue` = `unbutu`. Chẩn đoán panel trống: đọc query thật trong `system.query_log` của ClickHouse.
 
-## Alert → Telegram (OBS-5)
-SigNoz chỉ có kênh Webhook (payload kiểu Alertmanager) → container `signoz-alert-relay` (`deploy/signoz/alert-relay/relay.py`,
-Python thư viện chuẩn, không publish port) đổi thành tin Telegram. Token ở AWS `unbutu/prod/alert-relay` (ADR-0004).
+## Alert (OBS-5) – chỉ hiện trên UI SigNoz
+Đã chốt 2026-11-22: **không gửi ra ngoài** (không Telegram/email). Alert firing/resolved xem ở SigNoz → **Alerts** (tab Triggered / History).
+Muốn gửi ra ngoài sau này: SigNoz chỉ có kênh Webhook (payload Alertmanager) → cần cầu nối nhỏ cho Telegram (bản nháp ở PR #43, commit đầu).
 
-### Dựng lần đầu (đúng thứ tự)
-1. **Bot** (người dùng): Telegram → `@BotFather` → `/newbot` → lấy token. Nhắn 1 tin bất kỳ cho bot (hoặc thêm bot vào nhóm), rồi
-   lấy `chat.id`: `curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[].message.chat.id'`.
-2. **Secret** (người dùng, Terminal riêng – `read -s` không chạy qua `!`):
-   ```bash
-   read -rs T; read -r C   # dán token (không hiện), rồi chat id
-   jq -nc --arg t "$T" --arg c "$C" '{TELEGRAM_BOT_TOKEN:$t,TELEGRAM_CHAT_ID:$c}' \
-     | aws secretsmanager create-secret --region ap-southeast-1 --name unbutu/prod/alert-relay --secret-string file:///dev/stdin
-   unset T C
-   ```
-3. **pro-ticket-workload**: PR `prod/services/alert-relay/env.yaml` → plan xanh → merge → apply (server được quyền đọc secret).
-4. **Server**: chép cấu hình (§1), sinh env, chạy riêng `alert-relay` (không đụng các container khác của stack):
-   ```bash
-   ssh unbutu 'sudo bash /opt/unbutu-platform/observability/signoz/alert-relay/render-env.sh'   # chỉ in TÊN biến
-   ssh unbutu 'cd /opt/unbutu-platform/observability && sudo docker compose -f compose.observability.yml up -d --wait alert-relay'
-   ```
-   Từ giờ mọi lệnh `up` của stack cần có `env/alert-relay.env` (nằm ngoài `signoz/` nên §1 không xoá).
-5. **Kênh** (SigNoz UI): Settings → Alert Channels → New → Webhook, tên `telegram`, URL `http://signoz-alert-relay:8080/alert`,
-   bật "Send resolved alerts" → **Test** → phải có tin Telegram.
-
-### Alert rule (Alerts → New Alert → Metrics, kênh `telegram`)
+### Alert rule (Alerts → New Alert → Metrics, không chọn kênh)
 | Tên | Query | Điều kiện | Mức |
 |---|---|---|---|
 | `Lỗi 5xx > 5%` | A = `http.server.request.duration.count` rate/sum, B = như A + `http.response.status_code LIKE '5%'`, cả hai lọc `http.route NOT LIKE '/actuator%'`, group by `service.name`; công thức `B*100/A` | > 5, **all the times** trong 5 phút | critical |
@@ -121,9 +101,8 @@ Python thư viện chuẩn, không publish port) đổi thành tin Telegram. Tok
 Summary: `{{$labels.service.name}} = {{$value}}`. Sửa trên UI xong → Export JSON → `deploy/signoz/alerts/<tên>.json` → PR.
 
 ### Kiểm chứng (diễn tập)
-`ssh unbutu 'docker stop prod-catalog-service-1'` → trong ~5 phút có tin `Service mất tín hiệu` (và `Lỗi 5xx` ở api-gateway
-nếu có request vào `/api/catalog`) → `docker start prod-catalog-service-1` → tin RESOLVED. Không có tin: `docker logs signoz-alert-relay`
-(Telegram 401 = token sai, 400 = chat id sai), rồi SigNoz → Alerts → History.
+`ssh unbutu 'docker stop prod-catalog-service-1'` → trong ~5 phút SigNoz → Alerts có `Service mất tín hiệu` firing (và `Lỗi 5xx`
+ở api-gateway nếu có request vào `/api/catalog`) → `docker start prod-catalog-service-1` → resolved trong History.
 
 ## Đổi cấu hình ClickHouse / collector
 Sửa file mount (`deploy/signoz/clickhouse/*.yaml`, `ingester/*.yaml`) **không** làm compose tạo lại container.

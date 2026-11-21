@@ -16,7 +16,6 @@ x-versions:
   clickhouse: &clickhouse-image clickhouse/clickhouse-server:25.12.5
   keeper: &keeper-image clickhouse/clickhouse-keeper:25.12.5
   socketproxy: &socketproxy-image tecnativa/docker-socket-proxy:v0.5.0
-  python: &python-image python:3.13.17-alpine3.24
 
 x-common: &common
   restart: unless-stopped
@@ -205,31 +204,6 @@ services:
       # hostmetrics (OBS-2): chỉ /proc + /sys của host, KHÔNG mount cả `/` (tránh lộ /root/.aws, /etc/shadow…).
       - /proc:/hostfs/proc:ro
       - /sys:/hostfs/sys:ro
-
-  # Cầu nối alert SigNoz (webhook kiểu Alertmanager) → Telegram (OBS-5). SigNoz gọi http://alert-relay:8080/alert.
-  # Không publish port. Token Telegram: env/alert-relay.env (root 600) sinh từ AWS bằng
-  # signoz/alert-relay/render-env.sh – PHẢI có file này trước `up` (runbook signoz.md §Alert).
-  alert-relay:
-    <<: *common
-    image: *python-image
-    container_name: signoz-alert-relay
-    mem_limit: 32m
-    user: "65534:65534"           # nobody
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    env_file: [env/alert-relay.env]
-    environment:
-      PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONUNBUFFERED: "1"
-    command: [python, -I, /app/relay.py]
-    healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    volumes:
-      - ./signoz/alert-relay/relay.py:/app/relay.py:ro
 
 networks:
   signoz-network:
