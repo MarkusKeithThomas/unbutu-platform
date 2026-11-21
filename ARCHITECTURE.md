@@ -97,6 +97,7 @@ Dự án là **môi trường luyện kỹ năng backend/vận hành giống mô
 ```
 Internet ─▶ Funnel :443 ─▶ 127.0.0.1:8080 (prod gateway)
 Tailnet  ─▶ tailscale serve :8443 ─▶ 127.0.0.1:3301 (SigNoz UI)     ← chỉ trong tailnet, không Funnel
+Tailnet  ─▶ tailscale serve :9443 ─▶ 127.0.0.1:8091 (kafka-ui, chỉ đọc – ADR-0008)
 (Không có staging trên server – môi trường thứ 2 là local trên MacBook, ADR-0003.)
 
 ┌─ project "prod" (network prod_default) ─┐
@@ -128,6 +129,7 @@ Tailnet  ─▶ tailscale serve :8443 ─▶ 127.0.0.1:3301 (SigNoz UI)     ← 
 | `redis` | Rate limit (gateway), seat hold TTL (inventory) | | nội bộ |
 | `rabbitmq` | Event bất đồng bộ giữa service | | nội bộ |
 | `signoz` / `clickhouse` / `otel-collector` | Log, metrics, trace, alert (ADR-0006) | | project `observability` |
+| `kafka-ui` | Xem topic/message/consumer lag/DLT của Redpanda – **chỉ đọc** (ADR-0008) | | project `prod`, tailnet `:9443` |
 | `frontend` | UI trên Vercel – framework chưa chốt (đề xuất React + Vite) | | không chạy trên unbutu |
 
 Thư viện dùng chung: `libs/platform-starter` (requestId, ECS log, Problem Details, RestClient), `libs/event-contracts` (schema event).
@@ -402,6 +404,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 
 ## 12. Quyết định
 Đã chốt:
+- [x] **kafka-ui chỉ đọc** (kafbat, project `prod`) xem Redpanda để trace bug – `127.0.0.1:8091` → `tailscale serve :9443`, không Funnel; sửa dữ liệu Kafka chỉ bằng `rpk` qua SSH (ADR-0008, 2026-11-21).
 - [x] Docker Compose (không k3s/k8s).
 - [x] Đo đạc service: **OpenTelemetry Java agent** (chỉ prod), log JSON ECS stdout có `trace_id`/`span_id`/`requestId` (ADR-0006, 2026-11-16).
 - [x] Observability: **SigNoz tự host** (log + metrics + trace + alert), đo đạc theo OpenTelemetry; trace qua `traceId` + `X-Request-Id` (ADR-0006, thay ELK + Prometheus/Grafana).
