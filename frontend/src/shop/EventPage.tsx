@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ApiError, catalog, errorMessage, type CatalogEvent, type PublicTicketType } from '../api';
+import { ApiError, catalog, errorMessage, inventory, type Availability, type CatalogEvent, type PublicTicketType } from '../api';
 import { useAuth } from '../auth';
 import { setReturnTo } from '../returnTo';
 import { MAX_TICKETS_PER_ORDER, SERVICE_FEE_PER_TICKET, cartCount, loadCart, saveCart, type Cart } from './cart';
 import { DateBlock, ShopLayout, fmtTime, vnd } from './ShopLayout';
 
 const DOTS = ['#B45309', '#2563EB', '#0F766E', '#7C3AED', '#DB2777', '#6B7280'];
+/** Poll tồn kho 5 s ± 1 s (jitter: hàng nghìn người mở trang cùng lúc không bắn đồng loạt). Tab ẩn → dừng. */
+const POLL_MS = 5000;
 
 /** Bước 1 – chọn vé. Bước giữ vé 10′ + thanh toán: PR sau (POST /api/bookings). */
 export function EventPage() {
@@ -18,6 +20,29 @@ export function EventPage() {
   const [error, setError] = useState<{ msg: string; notFound: boolean } | null>(null);
   const [cart, setCart] = useState<Cart>(() => loadCart(id));
   const [toast, setToast] = useState<string | null>(null);
+  const [stock, setStock] = useState<Record<string, Availability>>({});
+
+  // Tồn kho realtime: lỗi inventory không chặn trang (vẫn chọn được theo tổng số vé), chỉ thiếu dòng "Còn x / y".
+  useEffect(() => {
+    let alive = true;
+    let timer: number | undefined;
+    const tick = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const list = await inventory.availability(id);
+          if (alive) setStock(Object.fromEntries(list.map((a) => [a.ticketTypeId, a])));
+        } catch {
+          /* giữ số cũ */
+        }
+      }
+      if (alive) timer = window.setTimeout(tick, POLL_MS - 1000 + Math.random() * 2000);
+    };
+    void tick();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [id]);
 
   useEffect(() => {
     let alive = true;
@@ -57,11 +82,14 @@ export function EventPage() {
   const change = (t: PublicTicketType, d: number) =>
     setCart((old) => {
       const cur = old[t.id] ?? 0;
-      if (d > 0 && (cartCount(old) >= MAX_TICKETS_PER_ORDER || cur >= t.totalQuantity)) return old;
+      if (d > 0 && (cartCount(old) >= MAX_TICKETS_PER_ORDER || cur >= limitOf(t))) return old;
       const next = { ...old, [t.id]: Math.max(0, cur + d) };
       if (next[t.id] === 0) delete next[t.id];
       return next;
     });
+
+  /** Số tối đa chọn được cho 1 hạng: theo tồn kho realtime nếu có, không thì theo tổng phát hành. */
+  const limitOf = (t: PublicTicketType) => stock[t.id]?.available ?? t.totalQuantity;
 
   const proceed = () => {
     if (count === 0) return;
@@ -110,12 +138,17 @@ export function EventPage() {
           <div className="box" style={{ overflow: 'hidden' }}>
             <div className="tt-head">
               <h2>Chọn hạng vé</h2>
+              {count < MAX_TICKETS_PER_ORDER && Object.keys(stock).length > 0 && <span>Tồn kho cập nhật realtime</span>}
               {count >= MAX_TICKETS_PER_ORDER && <span>Đã chọn tối đa {MAX_TICKETS_PER_ORDER} vé</span>}
             </div>
             {types.length === 0 && <div className="notice">Sự kiện chưa mở bán hạng vé nào.</div>}
             {types.map((t, i) => {
               const qty = cart[t.id] ?? 0;
-              const onSale = t.status === 'ON_SALE' && t.totalQuantity > 0;
+              const s = stock[t.id];
+              const soldOut = s ? s.state === 'SOLD_OUT' : t.totalQuantity === 0;
+              const onSale = t.status === 'ON_SALE' && (s ? s.state !== 'PAUSED' : true) && !soldOut;
+              const low = s?.state === 'LOW';
+              const pct = s && s.total > 0 ? Math.round((s.available / s.total) * 100) : 100;
               return (
                 <div key={t.id} className={`tt-row${qty > 0 ? ' sel' : ''}${onSale ? '' : ' off'}`}>
                   <div className="tt-name">
@@ -125,19 +158,22 @@ export function EventPage() {
                       {t.description && <small>{t.description}</small>}
                     </div>
                   </div>
-                  {/* "Còn x / y" realtime cần inventory-service (PR giữ vé); hiện tổng số vé phát hành. */}
-                  <div className="tt-stock">{t.totalQuantity.toLocaleString('vi-VN')} vé</div>
+                  <div className={`tt-stock${low ? ' low' : ''}${soldOut ? ' out' : ''}`}>
+                    {s ? (soldOut ? 'Đã bán hết' : `Còn ${s.available.toLocaleString('vi-VN')} / ${s.total.toLocaleString('vi-VN')}`)
+                      : `${t.totalQuantity.toLocaleString('vi-VN')} vé`}
+                    {s && <div className="bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></div>}
+                  </div>
                   <div className="tt-price">{vnd(t.price)}</div>
                   <div className="tt-act">
                     {onSale ? (
                       <div className="stepper">
                         <button type="button" aria-label={`Bớt 1 vé ${t.name}`} disabled={qty === 0} onClick={() => change(t, -1)}>−</button>
                         <span aria-live="polite">{qty}</span>
-                        <button type="button" aria-label={`Thêm 1 vé ${t.name}`} disabled={count >= MAX_TICKETS_PER_ORDER || qty >= t.totalQuantity}
+                        <button type="button" aria-label={`Thêm 1 vé ${t.name}`} disabled={count >= MAX_TICKETS_PER_ORDER || qty >= limitOf(t)}
                           onClick={() => change(t, 1)}>+</button>
                       </div>
                     ) : (
-                      <span className="off">{t.status === 'PAUSED' ? 'Tạm dừng bán' : 'Hết vé'}</span>
+                      <span className="off">{soldOut ? 'Hết vé' : 'Tạm dừng bán'}</span>
                     )}
                   </div>
                 </div>

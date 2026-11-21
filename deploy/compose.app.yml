@@ -91,6 +91,39 @@ services:
       retries: 12
       start_period: 20s
 
+  # Tồn kho giữ vé (Lua atomic) – sổ cái bền ở Postgres inventory_db. AOF everysec: restart không mất vé đang giữ (≤ 1 s).
+  # noeviction: hết RAM thì BÁO LỖI, không lặng lẽ xoá key tồn kho. Chỉ network nội bộ (không publish, không vào `telemetry`).
+  # TODO (ORD-1b+): bật ACL/mật khẩu khi có service ngoài nhóm dùng chung network.
+  redis:
+    image: redis:7.4.7-alpine
+    restart: unless-stopped
+    mem_limit: 256m
+    logging: *logging
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", "",
+              "--maxmemory", "192mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  inventory-service:
+    <<: *service
+    image: ${INVENTORY_SERVICE_IMAGE:?Thiếu INVENTORY_SERVICE_IMAGE trong images.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: env/inventory-service.env
+        format: raw
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: inventory-service
+
   catalog-service:
     <<: *service
     image: ${CATALOG_SERVICE_IMAGE:?Thiếu CATALOG_SERVICE_IMAGE trong images.env}
@@ -150,3 +183,4 @@ networks:
 volumes:
   pgdata:
   redpanda-data:
+  redis-data:

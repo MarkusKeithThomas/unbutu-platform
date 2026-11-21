@@ -60,7 +60,12 @@
 .tt-name i { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
 .tt-name b { display: block; font-size: 16px; }
 .tt-name small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
-.tt-stock { flex: 0 0 140px; font-size: 13px; color: #374151; font-weight: 600; }
+.tt-stock { flex: 0 0 160px; font-size: 13px; color: #374151; font-weight: 600; }
+.tt-stock.low { color: #9A3412; }
+.tt-stock.out { color: #6B7280; }
+.tt-stock .bar { height: 6px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; }
+.tt-stock .bar i { display: block; height: 100%; background: var(--brand); }
+.tt-stock.low .bar i { background: #EA580C; }
 .tt-price { flex: 0 0 130px; text-align: right; font-weight: 700; font-size: 16px; }
 .tt-act { flex: 0 0 132px; display: flex; justify-content: flex-end; }
 .tt-act .off { font-size: 13px; font-weight: 600; color: #6B7280; padding: 10px 0; }
