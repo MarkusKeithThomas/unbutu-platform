@@ -121,14 +121,17 @@ sync_deploy_files() {
     log "file deploy @ ${sha:0:7}"
 }
 
-# Mạng nhà → GHCR đôi khi đứt giữa chừng ("connection reset by peer"); pull là bước an toàn để thử lại
-# (chưa đụng container nào). Hết lượt vẫn lỗi → coi là deploy lỗi.
+# Mạng nhà → GHCR đôi khi đứt giữa chừng ("connection reset by peer", qua IPv6 tới CDN của GHCR); pull là bước
+# an toàn để thử lại (chưa đụng container nào). Layer đã tải xong được giữ → lần sau chỉ tải phần còn thiếu.
+# 2026-11-21: đứt liên tục ~2 phút → 3 lần × 10 s không đủ, deploy rollback. Giờ: 5 lần, chờ tăng dần (~3 phút),
+# kéo tối đa 2 image song song (ít kết nối lớn cùng lúc). Hết lượt vẫn lỗi → coi là deploy lỗi.
+readonly PULL_BACKOFF=(15 30 60 90)
 pull_images() {
     local images_env=$1 attempt
-    for attempt in 1 2 3; do
-        compose "$images_env" pull --quiet && return 0
-        log "pull lỗi (lần $attempt/3)"
-        [[ $attempt -lt 3 ]] && sleep 10
+    for attempt in 1 2 3 4 5; do
+        COMPOSE_PARALLEL_LIMIT=2 compose "$images_env" pull --quiet && return 0
+        log "pull lỗi (lần $attempt/5)"
+        [[ $attempt -lt 5 ]] && sleep "${PULL_BACKOFF[$((attempt - 1))]}"
     done
     return 1
 }
