@@ -1,6 +1,6 @@
 package com.unbutu.ticket.catalog.event;
 
-import com.unbutu.ticket.catalog.outbox.Outbox;
+import com.unbutu.ticket.outbox.Outbox;
 import com.unbutu.ticket.catalog.tickettype.TicketTypeRepository;
 import com.unbutu.ticket.events.catalog.CatalogEvents;
 import com.unbutu.ticket.catalog.web.CatalogException;

@@ -31,9 +31,10 @@ catalog:
     jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:unbutu-identity}
 
-  # Transactional Outbox → Redpanda (catalog.event.v1). Redpanda tắt thì API vẫn chạy, event chờ trong bảng outbox.
-  outbox:
-    poll-interval: 500ms
+
+# Transactional Outbox (libs/outbox) → Redpanda (catalog.event.v1). Redpanda tắt thì API vẫn chạy, event chờ trong bảng outbox.
+outbox:
+  poll-interval: 500ms
 
 server:
   port: ${SERVER_PORT:8080}

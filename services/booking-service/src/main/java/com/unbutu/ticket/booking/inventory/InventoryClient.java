@@ -65,6 +65,26 @@ public class InventoryClient {
         }
     }
 
+    /** Chốt vé đã thanh toán. true = COMMITTED, false = không còn đủ vé (→ hoàn tiền). Lỗi mạng → Unavailable (caller retry). */
+    public boolean commit(UUID eventId, UUID reservationId, Map<UUID, Integer> items) {
+        var body = Map.of("items", items.entrySet().stream()
+                .map(e -> Map.of("ticketTypeId", e.getKey(), "quantity", e.getValue())).toList());
+        try {
+            return http.post().uri("/internal/events/{e}/reservations/{r}/commit", eventId, reservationId).body(body)
+                    .exchange((req, res) -> {
+                        if (res.getStatusCode().is2xxSuccessful()) {
+                            return true;
+                        }
+                        if (res.getStatusCode().value() == 409) {
+                            return false;
+                        }
+                        throw new UnavailableException("inventory commit HTTP " + res.getStatusCode().value(), null);
+                    });
+        } catch (RestClientException e) {
+            throw new UnavailableException("không gọi được inventory (commit): " + e.getMessage(), e);
+        }
+    }
+
     /** Best-effort: lỗi thì thôi – hold có hạn, sweeper của inventory tự trả vé. Idempotent phía inventory. */
     public void release(UUID eventId, UUID reservationId) {
         try {

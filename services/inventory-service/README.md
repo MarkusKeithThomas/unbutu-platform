@@ -21,6 +21,7 @@
 - API nội bộ (gateway không route): `POST /internal/events/{eventId}/reservations` `{reservationId, items[{ticketTypeId, quantity}], ttlSeconds}`
   → `200 RESERVED {expiresAt}` · `409 SOLD_OUT|NOT_ON_SALE {ticketTypeId}`; idempotent theo `reservationId`.
   `DELETE /internal/events/{eventId}/reservations/{reservationId}` → 204 (idempotent). Hết hạn: `HoldSweeper` (1 s) tự trả vé.
+- **Chốt vé** (PAY-1): `POST /internal/events/{eventId}/reservations/{id}/commit {items}` – hold còn → xoá hold; hold đã nhả (trả muộn) → lấy lại từ số còn nếu đủ; rồi sổ cái `UPDATE stock SET sold = sold + n WHERE sold + n <= total` + bảng `commits` (idempotent) trong 1 transaction. Sổ cái từ chối → trả lại Redis → `409 SOLD_OUT` (booking hoàn tiền).
 - **Giới hạn đã biết**: Redis mất sạch dữ liệu → vé đang giữ mất (bán lại được). Chặn ở bước chốt vé (ORD-1c/PAY):
   `UPDATE stock SET sold = sold + n WHERE sold + n <= total_quantity` – sổ cái không bao giờ bán quá; không đủ → hoàn tiền.
 

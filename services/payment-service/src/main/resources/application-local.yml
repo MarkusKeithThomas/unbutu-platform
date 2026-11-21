@@ -1,0 +1,15 @@
+# Profile "local": chạy trong IntelliJ (SPRING_PROFILES_ACTIVE=local). Bảng port: README.md.
+server:
+  port: 8085
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payment_db
+    username: payment
+    password: payment
+  kafka:
+    bootstrap-servers: localhost:19092
+
+payment:
+  mock:
+    ipn-url: http://localhost:8085/api/payments/vnpay/ipn

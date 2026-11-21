@@ -15,7 +15,9 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | `catalog-service` | Chạy prod: sự kiện + hạng vé (đọc công khai, ghi cần ADMIN) |
 | `inventory-service` | Tồn kho + giữ vé: Redis Lua (oversell = 0) + sổ cái Postgres, nghe `catalog.event.v1` |
 | `booking-service` | Giữ vé 10′ (idempotent, 4 vé/tài khoản/sự kiện), huỷ, tự hết hạn; bảng giá từ `catalog.event.v1` |
-| `payment`, `notification` | Mới có khung thư mục + README, chưa có code |
+| `payment-service` | Thanh toán giao thức VNPay 2.1.0 – **cổng giả lập** (IPN là nguồn sự thật, Outbox `payment.result.v1`, hoàn tiền) |
+| `notification` | Mới có khung thư mục + README, chưa có code |
+| `libs/outbox` | Transactional Outbox dùng chung (catalog, payment) |
 | `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
 | `libs/event-contracts` | Schema event (`EventEnvelope`, `CatalogEvents`) – topic `catalog.event.v1` |
 | `frontend/` | React + Vite (nginx): đăng nhập/đăng ký, Google login, quản trị sự kiện + hạng vé |
@@ -34,12 +36,14 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | GET · POST · PUT · DELETE | `/api/catalog/admin/ticket-types[/{id}]` | CRUD hạng vé – **ADMIN**. Đã từng mở bán → không xoá hẳn / không về Nháp (409) |
 | GET | `/api/inventory/events/{id}/availability` | "Còn x / y" realtime của từng hạng vé (`Cache-Control: public, max-age=1`) |
 | POST · GET · DELETE | `/api/bookings` (+ `Idempotency-Key`), `/api/bookings/{id}`, `/api/bookings/me` | Giữ vé 10′ / xem đơn / huỷ – cần đăng nhập |
+| POST | `/api/bookings/{id}/checkout` | Sang cổng thanh toán (`{method, buyer}` → `paymentUrl`) |
+| GET | `/api/payments/vnpay/ipn`, `/api/payments/vnpay/return`, `/api/payments/mock/pay` | IPN (server→server) / trình duyệt quay về / trang ngân hàng giả lập |
 | POST | `/api/identity/register` · `/login` · `/refresh` · `/logout` | Đăng ký / đăng nhập email+mật khẩu; refresh token trong cookie HttpOnly |
 | GET | `/api/identity/me` | Hồ sơ (cần `Authorization: Bearer`) |
 | GET | `/api/identity/providers` | Cách đăng nhập đang bật (`google: true/false`) |
 | GET | `/api/identity/oauth2/authorization/google` | Bắt đầu login Google (redirect) |
 | GET | `/admin/events`, `/admin/ticket-types` | UI quản trị (chỉ ADMIN) |
-| GET | `/`, `/events/{id}`, `/checkout/{bookingId}` | UI khách: danh sách sự kiện, chọn vé, bước 2 (đếm ngược giữ vé, thông tin người mua) |
+| GET | `/`, `/events/{id}`, `/checkout/{bookingId}`, `/orders/{bookingId}` | UI khách: sự kiện → chọn vé → bước 2 (giữ vé, người mua, thanh toán) → bước 3 kết quả |
 | GET | `/login`, `/register` | UI (container `frontend`, gateway route mọi path không phải `/api/**`) |
 
 ## Công nghệ
@@ -64,7 +68,7 @@ docs/                    # adr/, runbooks/, postmortems/, diagrams/, setup-steps
 
 **Cần có:** Java 21, Docker Desktop **đang chạy**, `make`, IntelliJ (để debug).
 
-`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `booking-service`, `frontend`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
+`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `booking-service`, `payment-service`, `frontend`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
 Port cố định trên máy, giống nhau dù chạy trong container hay IntelliJ (đặt trước cho cả service chưa có code):
 
 | Service | Port | | Service | Port |

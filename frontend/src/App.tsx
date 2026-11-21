@@ -8,6 +8,7 @@ import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { CheckoutPage } from './shop/CheckoutPage';
+import { OrderResultPage } from './shop/OrderResultPage';
 import { EventPage } from './shop/EventPage';
 import { EventsListPage } from './shop/EventsListPage';
 
@@ -62,6 +63,7 @@ export function App() {
       <Route path="/" element={<EventsListPage />} />
       <Route path="/events/:id" element={<EventRoute />} />
       <Route path="/checkout/:id" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
+      <Route path="/orders/:id" element={<RequireAuth><OrderResultPage /></RequireAuth>} />
       <Route path="/admin" element={<Navigate to="/admin/ticket-types" replace />} />
       <Route path="/admin/events" element={<RequireAdmin><EventsPage /></RequireAdmin>} />
       <Route path="/admin/ticket-types" element={<RequireAdmin><TicketTypesPage /></RequireAdmin>} />

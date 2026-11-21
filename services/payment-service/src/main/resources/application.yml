@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/payment_db}
+    username: ${DB_USERNAME:payment}
+    password: ${DB_PASSWORD:payment}
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:redpanda:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 12000
+    admin:
+      operation-timeout: 5s
+
+payment:
+  # Giao thức VNPay (v2.1.0). Cổng giả lập dùng đúng giao thức → đổi sang VNPay sandbox chỉ đổi pay-url/tmn-code/hash-secret.
+  vnpay:
+    tmn-code: ${PAYMENT_TMN_CODE:MOCKTMN1}
+    hash-secret: ${PAYMENT_HASH_SECRET:local-dev-hash-secret-change-me}   # prod: AWS Secrets Manager (ADR-0004)
+    pay-url: ${PAYMENT_PAY_URL:${payment.public-base-url}/api/payments/mock/pay}
+  public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}   # cổng gọi về: return URL, IPN (qua gateway)
+  ui-base-url: ${UI_BASE_URL:http://localhost:8080}           # return → redirect về UI /orders/{bookingId}
+  mock:
+    enabled: ${PAYMENT_MOCK_ENABLED:true}
+    ipn-url: ${PAYMENT_MOCK_IPN_URL:http://localhost:8080/api/payments/vnpay/ipn}   # gọi thẳng chính service (server→server)
+    ipn-delay: ${PAYMENT_MOCK_IPN_DELAY:0ms}          # luyện sự cố: IPN đến chậm
+    ipn-drop-rate: ${PAYMENT_MOCK_IPN_DROP_RATE:0}    # luyện sự cố: tỉ lệ IPN bị mất (0..1) → cần job đối soát (PAY-1b)
+    allow-late: ${PAYMENT_MOCK_ALLOW_LATE:true}       # cho trả sau hạn giữ (mô phỏng IPN trễ) → luồng còn vé / hoàn tiền
+
+outbox:
+  poll-interval: 300ms
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

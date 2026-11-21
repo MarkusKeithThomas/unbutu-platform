@@ -49,6 +49,12 @@ spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-sta
 spring-boot-starter-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 
+# libs/outbox (compileOnly – service tự mang starter kafka/jdbc)
+spring-kafka = { module = "org.springframework.kafka:spring-kafka" }
+spring-jdbc = { module = "org.springframework:spring-jdbc" }
+spring-tx = { module = "org.springframework:spring-tx" }
+jackson-databind = { module = "tools.jackson.core:jackson-databind" }
+
 # Test với Postgres thật trong Docker
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }

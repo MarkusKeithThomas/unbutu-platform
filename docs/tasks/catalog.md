@@ -1,12 +1,8 @@
 # Task – catalog (sự kiện, hạng vé)
 
 ## Đang mở
-- [ ] **ROLLOUT ORD-1b + ORD-1c lên prod** (unbutu-platform #33 + pro-ticket-workload #5, đã gộp):
-  1. ✅ Secret `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (Claude tạo 2026-11-21, value ngẫu nhiên – người dùng sẽ đổi).
-  2. ✅ Merge + apply pro-ticket-workload **#5** (2026-11-21).
-  3. ✅ DB `inventory_db`, `booking_db` đã tạo trên prod (đăng nhập bằng password trong secret OK).
-  4. #33 Ready → merge → Approve deploy → Claude kiểm prod (availability, giữ vé thử, huỷ).
-- [ ] **PAY-1 – Thanh toán (sau ORD-1)** – đã chốt 2026-11-21: (1) làm SAU khi giữ vé xong; (2) **cổng giả lập trước** (payment-service tự phục vụ trang "ngân hàng giả", cùng giao thức VNPay: URL ký HMAC-SHA512, IPN server→server, return URL, chỉnh tỉ lệ lỗi/độ trễ để luyện sự cố) → **adapter VNPay sandbox sau**; (3) trả tiền **sau khi hết hạn giữ**: còn vé → giữ lại + `CONFIRMED`, hết vé → `REFUND_PENDING` + hoàn tiền tự động. API: A10 checkout (`Idempotency-Key`, bấm lại → cùng URL), A14 IPN (nguồn sự thật), A15 return (chỉ redirect). Thiết kế: private-docs/thiet-ke-ban-ve/02 §3–§5.
+- [ ] **ROLLOUT PAY-1**: (1) ✅ secret `unbutu/prod/payment-service` (DB_PASSWORD, PAYMENT_HASH_SECRET); (2) merge + apply pro-ticket-workload **#6**; (3) Claude tạo DB `payment` (runbook); (4) merge PR PAY-1 → Approve deploy → Claude chạy thử 1 đơn thật trên prod.
+- [ ] **PAY-1b – sau cổng giả lập**: (1) job **đối soát** payment `PENDING` > 15′ (giả lập `querydr`) → phát kết quả như IPN – cần cho `ipn-drop-rate`; (2) Outbox `booking.*` (`booking.confirmed`) cho ticketing/notification; (3) **adapter VNPay sandbox** (đăng ký merchant test, `PAYMENT_MOCK_ENABLED=false` trên prod); (4) cân nhắc chặn cổng giả lập trên prod (ai cũng "trả tiền" được) – chỉ bật cho tài khoản test hoặc tắt khi có sandbox.
 - [ ] **ORD-1 – Giữ vé 10′ (PR kế tiếp)**: inventory-service + **Redis (Lua atomic, chống oversell)** – `GET /api/inventory/events/{id}/availability` (A8b, "Còn x / y"), `POST /internal/reservations`; booking-service `POST /api/bookings` (JWT + `Idempotency-Key`, ≤ 4 vé) → `PENDING` + `expiresAt`, `GET /api/bookings/{id}`, `DELETE` huỷ, hết hạn tự nhả. UI: nút "Tiếp tục thanh toán" đọc giỏ `sessionStorage cart:<eventId>`. Thiết kế: private-docs/thiet-ke-ban-ve/02 §1, §3, §6. **Đã chốt 2026-11-21**: (1) catalog → inventory/booking qua **Redpanda + Outbox** (`catalog.event.v1`: `ticket-type.upserted` giá + tổng số); (2) **Redis Lua giữ chỗ, Postgres là sổ cái**; (3) **4 vé / tài khoản / sự kiện**; (4) có UI bước 2 (form người mua + đếm ngược 10′ + "← Chọn lại vé" = huỷ giữ); nút "Xác nhận thanh toán" để PR thanh toán.
   Tách: ~~ORD-1a~~ → ~~ORD-1b~~ → ~~ORD-1c~~ (xong code 2026-11-21, chờ rollout). Mô tả ORD-1c gốc: `POST /api/bookings` (JWT, `Idempotency-Key`, 4 vé/tài khoản/sự kiện, giá từ bảng sao chép `catalog.event.v1`) → gọi inventory `POST /internal/events/{e}/reservations` (reservationId = bookingId) → `PENDING` + `expiresAt`; `GET /api/bookings/{id}`, `GET /api/bookings/me`, `DELETE` (huỷ → nhả vé), hết hạn → `EXPIRED`; UI bước 2 (form người mua + đếm ngược + "← Chọn lại vé").
   **Rollout prod ORD-1b** (theo thứ tự): (1) người dùng tạo secret `unbutu/prod/inventory-service` key `DB_PASSWORD`; (2) merge + apply pro-ticket-workload PR #5; (3) Claude chạy `docs/runbooks/add-service-database.md`; (4) merge PR inventory → Approve deploy.
@@ -15,6 +11,8 @@
 - [ ] **CAT-5 – Test** cho API admin (401/403/CRUD) khi bắt đầu viết test.
 
 ## Đã xong
+- 2026-11-21: PAY-1 – payment-service (cổng giả lập giao thức VNPay, IPN + Outbox, hoàn tiền), libs/outbox (catalog chuyển sang), inventory chốt vé (sổ cái có điều kiện, idempotent), booking checkout + quyết toán + ân hạn 5′, UI xác nhận thanh toán + bước 3. Đo local: thành công / thất bại → trả lại / IPN giả mạo 97 / trả muộn còn vé → CONFIRMED / trả muộn hết vé → REFUNDED, sold = total.
+- 2026-11-21: ROLLOUT ORD-1b + ORD-1c (#33 + ptw#5, DB inventory/booking trên prod).
 - 2026-11-21: ORD-1c – booking-service (A9/A11/A12/A13, idempotency, 4 vé/tài khoản/sự kiện có khoá, hết hạn SKIP LOCKED) + UI bước 2 `/checkout/:id`. Đo local: song song 2 request vượt giới hạn → đúng 1 được; hết vé → 409 + CANCELLED; hết hạn → EXPIRED + trả vé.
 - 2026-11-21: ORD-1b – inventory-service (Redis Lua + sổ cái Postgres, consumer catalog.event.v1, A8b, reservations, sweeper) + UI "Còn x / y". Đo local: 100 request song song / 10 vé → đúng 10 thành công.
 - 2026-11-21: ORD-1a / CAT-3 – Redpanda (compose local + prod) + Transactional Outbox ở catalog → `catalog.event.v1` (`event.upserted|deleted`, `ticket-type.upserted|deleted`), backfill dữ liệu cũ (V4), ADR-0007.

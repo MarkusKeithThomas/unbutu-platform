@@ -1,12 +1,15 @@
 package com.unbutu.ticket.inventory.reservation;
 
 import com.unbutu.ticket.inventory.stock.StockStore;
+import com.unbutu.ticket.inventory.reservation.ReservationRequest.Item;
 import com.unbutu.ticket.inventory.web.InventoryException;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,7 @@ class ReservationController {
     }
 
     private final StockStore store;
+    private final CommitService commits;
     private final Clock clock;
 
     @Value("${inventory.hold.ttl:10m}")
@@ -46,6 +50,27 @@ class ReservationController {
             case SOLD_OUT -> throw InventoryException.conflict("SOLD_OUT", "Hạng vé đã hết hoặc không đủ số lượng", r.ticketTypeId());
             case NOT_ON_SALE -> throw InventoryException.conflict("NOT_ON_SALE", "Hạng vé không mở bán", r.ticketTypeId());
         };
+    }
+
+    record CommitRequest(@NotEmpty List<@Valid Item> items) {
+    }
+
+    record CommitResponse(UUID reservationId, String status) {
+    }
+
+    /**
+     * Đã thanh toán → chốt vé (booking gọi khi nhận payment.succeeded). items gửi kèm để xử lý trường hợp trả muộn
+     * (hold đã nhả). Idempotent theo reservationId. 409 SOLD_OUT → booking hoàn tiền.
+     */
+    @PostMapping("/{reservationId}/commit")
+    CommitResponse commit(@PathVariable UUID eventId, @PathVariable UUID reservationId, @Valid @RequestBody CommitRequest req) {
+        Map<UUID, Integer> items = new LinkedHashMap<>();
+        req.items().forEach(i -> items.merge(i.ticketTypeId(), i.quantity(), Integer::sum));
+        var r = commits.commit(eventId, reservationId, items);
+        if (r.outcome() == CommitService.Outcome.SOLD_OUT) {
+            throw InventoryException.conflict("SOLD_OUT", "Không còn đủ vé để chốt đơn", r.ticketTypeId());
+        }
+        return new CommitResponse(reservationId, "COMMITTED");
     }
 
     /** Huỷ sớm ("← Chọn lại vé") hoặc bù trừ khi booking lỗi. Idempotent. */

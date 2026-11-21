@@ -14,7 +14,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       # Mỗi service 1 user + 1 database (xem postgres/init/01-create-service-databases.sh)
-      SERVICE_DATABASES: catalog identity inventory booking
+      SERVICE_DATABASES: catalog identity inventory booking payment
       CATALOG_DB_PASSWORD: catalog
       IDENTITY_DB_PASSWORD: identity
     volumes:
@@ -94,6 +94,33 @@ services:
       retries: 20
     mem_limit: 512m
 
+  payment-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      args:
+        SERVICE: payment-service
+    image: payment-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/payment_db
+      DB_USERNAME: payment
+      DB_PASSWORD: payment
+      PUBLIC_BASE_URL: http://localhost:8080                           # trình duyệt quay về qua gateway
+      UI_BASE_URL: ${UI_BASE_URL:-http://localhost:8080}
+      PAYMENT_MOCK_IPN_DELAY: ${PAYMENT_MOCK_IPN_DELAY:-0ms}           # luyện sự cố: export trước `make up`
+      PAYMENT_MOCK_IPN_DROP_RATE: ${PAYMENT_MOCK_IPN_DROP_RATE:-0}
+    ports:
+      - "127.0.0.1:8085:8080"   # port cố định của payment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+
   booking-service:
     build:
       context: ..
@@ -107,6 +134,7 @@ services:
       DB_PASSWORD: booking
       IDENTITY_JWKS_URI: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}/.well-known/jwks.json
       INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL:-http://inventory-service:8080}
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL:-http://payment-service:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -206,6 +234,7 @@ services:
       IDENTITY_SERVICE_URL: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}
       INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL:-http://inventory-service:8080}
       BOOKING_SERVICE_URL: ${BOOKING_SERVICE_URL:-http://booking-service:8080}
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL:-http://payment-service:8080}
       FRONTEND_SERVICE_URL: ${FRONTEND_SERVICE_URL:-http://frontend:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # container gọi ra máy Mac
