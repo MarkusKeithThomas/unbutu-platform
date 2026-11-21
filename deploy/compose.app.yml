@@ -66,6 +66,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # Event log (Kafka API) – ADR-0007. 1 node, 1 core. Chế độ production: có fsync + kiểm tra hệ thống;
+  # Redpanda đòi ≥ 1 GB/core ở chế độ này (--memory là trần cấp phát; đo thực tế ~100 MB khi tải nhẹ).
+  # Không env_file (không cần secret) → deploy.sh không cần env-map. Chỉ trong network nội bộ, không publish port.
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.2.10
+    restart: unless-stopped
+    mem_limit: 1280m
+    logging: *logging
+    # Image mặc định bật developer_mode (= bỏ fsync, mất điện có thể hỏng dữ liệu) → tắt trước khi start.
+    # auto_create_topics_enabled mặc định false (topic do producer khai báo).
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        rpk redpanda config set redpanda.developer_mode false &&
+        exec rpk redpanda start --smp=1 --memory=1G --reserve-memory=0M --overprovisioned
+        --kafka-addr=internal://0.0.0.0:9092 --advertise-kafka-addr=internal://redpanda:9092 --default-log-level=warn
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -Eq 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   catalog-service:
     <<: *service
     image: ${CATALOG_SERVICE_IMAGE:?Thiếu CATALOG_SERVICE_IMAGE trong images.env}
@@ -124,3 +149,4 @@ networks:
 
 volumes:
   pgdata:
+  redpanda-data:

@@ -14,7 +14,10 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = "spring.flyway.locations=classpath:db/migration,classpath:db/seed-local")
+@SpringBootTest(properties = {
+        "spring.flyway.locations=classpath:db/migration,classpath:db/seed-local",
+        "catalog.outbox.relay-enabled=false",       // test không có Redpanda: event chỉ nằm trong bảng outbox
+        "spring.kafka.admin.auto-create=false"})
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class EventApiIntegrationTest {

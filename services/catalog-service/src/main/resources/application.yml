@@ -8,6 +8,18 @@ spring:
   mvc:
     problemdetails:
       enabled: true   # lỗi validation/404… → RFC 9457 Problem Details
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:redpanda:9092}
+    producer:
+      acks: all                          # broker ghi xong mới xác nhận
+      properties:
+        enable.idempotence: true         # retry không tạo bản trùng trong 1 phiên producer
+        linger.ms: 5                     # gom batch
+        max.block.ms: 5000               # broker không tới được → send() không treo thread quá 5 s
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 12000       # < thời gian relay chờ (15 s)
+    admin:
+      operation-timeout: 5s              # tạo topic lúc khởi động; broker chưa lên → không fail, OutboxRelay tạo lại trước lần gửi đầu
   jpa:
     open-in-view: false
     hibernate:
@@ -18,6 +30,10 @@ catalog:
     # Public key của identity-service (gọi nội bộ, cache trong bộ nhớ). Token phải có iss khớp + token_use=access.
     jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:unbutu-identity}
+
+  # Transactional Outbox → Redpanda (catalog.event.v1). Redpanda tắt thì API vẫn chạy, event chờ trong bảng outbox.
+  outbox:
+    poll-interval: 500ms
 
 server:
   port: ${SERVER_PORT:8080}

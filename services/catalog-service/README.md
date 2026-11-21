@@ -6,7 +6,7 @@
 |---|---|
 | Trách nhiệm | Sự kiện (event/movie), địa điểm (venue), phòng/khu (hall), suất diễn (showtime), loại vé & giá cơ bản. Đọc nhiều → cache. |
 | Dữ liệu | Postgres `catalog_db`: events, venues, halls, seat_layouts, showtimes, ticket_types. |
-| Event (RabbitMQ) | Phát: `showtime.published`. |
+| Event (Redpanda, ADR-0007) | Phát qua Outbox: topic `catalog.event.v1` (key = id sự kiện) – `event.upserted`, `event.deleted`, `ticket-type.upserted`, `ticket-type.deleted` (schema: `libs/event-contracts`). Redpanda tắt → API vẫn chạy, event chờ trong bảng `outbox`. |
 | Gọi đồng bộ | – |
 | Package | `com.unbutu.ticket.catalog` |
 | Port trong container | 8080 |

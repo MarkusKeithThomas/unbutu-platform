@@ -4,16 +4,21 @@
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-21.
 
 ## Đang chờ người dùng
-- Merge **PR khách xem/chọn vé** (nhánh `feat/client-browse`, thay #29 – #29 đóng vì không force-push được sau khi #28 squash) → Approve deploy.
+- Review + merge PR **ORD-1a** (Redpanda + Outbox catalog, nhánh `feat/ord-1a-redpanda-outbox`) → Approve deploy.
+  Deploy này **thêm container `redpanda` lên prod** (mem_limit 1,25 GB, đo ~100 MB). Sau deploy kiểm tra:
+  `ssh unbutu 'docker exec prod-redpanda-1 rpk topic list; docker logs prod-catalog-service-1 2>&1 | grep Outbox: | tail -2'`
+  → phải thấy `catalog.event.v1` + "đã gửi N event" (backfill dữ liệu prod).
+- Đổi mật khẩu: người dùng nói `hthuongtn2905@gmail.com` – prod KHÔNG có; chỉ có `chthuongtn2905@gmail.com` → chờ xác nhận đúng email.
 
-## Làm ngay sau khi deploy
-1. **CAT-1** (`docs/tasks/catalog.md`): cấp ADMIN cho tài khoản quản trị trên prod
-   (`UPDATE users SET roles='CUSTOMER,ADMIN' WHERE email='…'` trong `identity_db`) → đăng nhập lại → thử `/admin/ticket-types`.
-2. Việc tiếp theo: **ORD-1a** (Redpanda + Redis vào compose local/prod + Outbox ở catalog) – quyết định đã chốt trong `docs/tasks/catalog.md` ORD-1. Thêm container prod: hỏi lại người dùng trước khi deploy. Mọi code: tự kiểm mở rộng 50k rps.
+## Làm tiếp
+1. **ORD-1b** (`docs/tasks/catalog.md`): Redis vào compose + inventory-service (consumer `catalog.event.v1`, A8b availability, reservations Lua, sổ cái Postgres).
+2. ORD-1c booking + UI bước 2 → rồi **PAY-1** (cổng giả lập, quyết định đã chốt). Mọi code: tự kiểm mở rộng 50k rps.
 
 ## Ghi chú local
-- DB local cũ: đã sửa checksum V1 của `catalog_db` + tạo tay user/DB `identity`. Gặp lại lỗi Flyway/DB thiếu → `make clean` (xoá hết dữ liệu local).
-- User test local: `admin@local.test` / `Password123` (đã là ADMIN).
+- Kafka local: `localhost:19092` (IntelliJ) / `redpanda:9092` (container). Xem topic: `docker exec ticket-local-redpanda-1 rpk topic describe catalog.event.v1 -p`
+  (`rpk topic consume` không có `-n` sẽ chờ mãi).
+- DB local cũ đã sửa tay (checksum V1 catalog, user/DB identity). Lỗi Flyway → `make clean`.
+- User test local: `admin@local.test` / `Password123` (ADMIN).
 
 ## Kiểm tra nhanh đầu phiên
 ```bash
