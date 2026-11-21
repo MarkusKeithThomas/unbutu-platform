@@ -172,6 +172,16 @@ services:
       <<: *otel-env
       OTEL_SERVICE_NAME: booking-service
 
+  notification-service:
+    <<: *service
+    image: ${NOTIFICATION_SERVICE_IMAGE:?Thiếu NOTIFICATION_SERVICE_IMAGE trong images.env}
+    env_file:
+      - path: env/notification-service.env
+        format: raw
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: notification-service
+
   catalog-service:
     <<: *service
     image: ${CATALOG_SERVICE_IMAGE:?Thiếu CATALOG_SERVICE_IMAGE trong images.env}

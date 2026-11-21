@@ -124,7 +124,7 @@ Tailnet  ─▶ tailscale serve :9443 ─▶ 127.0.0.1:8091 (kafka-ui, chỉ đ�
 | `inventory-service` | Sơ đồ ghế theo suất, **giữ ghế có TTL**, xác nhận/nhả ghế, chống double-booking | `inventory_db` + Redis | bài toán concurrency chính |
 | `booking-service` | Đơn đặt vé, **điều phối Saga**, Outbox, idempotency key, phát hành vé QR | `booking_db` | |
 | `payment-service` | Cổng thanh toán **giả lập** (cấu hình tỉ lệ lỗi/độ trễ), webhook, hoàn tiền | `payment_db` | dùng để luyện sự cố |
-| `notification-service` | Email/Telegram xác nhận vé; chỉ tiêu thụ event | `notification_db` | consumer idempotent |
+| `notification-service` | **Vé điện tử QR** (ADR-0009) khi `booking.confirmed`; sau: email/Telegram | `notification_db` | consumer idempotent, vé = dữ liệu gốc |
 | `postgres` | PostgreSQL 17, 1 database + user riêng/service | | nội bộ |
 | `redis` | Rate limit (gateway), seat hold TTL (inventory) | | nội bộ |
 | `rabbitmq` | Event bất đồng bộ giữa service | | nội bộ |
@@ -404,6 +404,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 
 ## 12. Quyết định
 Đã chốt:
+- [x] **Vé QR trong notification-service** (2026-11-21, ADR-0009): nghe `booking.confirmed` → vé + QR JWS ES256 (verify offline qua JWKS); UI hiện QR ngay sau thanh toán + lịch sử `/orders`. Email là bước sau. Package `ticket` tách được thành ticketing-service.
 - [x] **kafka-ui chỉ đọc** (kafbat, project `prod`) xem Redpanda để trace bug – `127.0.0.1:8091` → `tailscale serve :9443`, không Funnel; sửa dữ liệu Kafka chỉ bằng `rpk` qua SSH (ADR-0008, 2026-11-21).
 - [x] Docker Compose (không k3s/k8s).
 - [x] Đo đạc service: **OpenTelemetry Java agent** (chỉ prod), log JSON ECS stdout có `trace_id`/`span_id`/`requestId` (ADR-0006, 2026-11-16).

@@ -16,7 +16,7 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | `inventory-service` | Tồn kho + giữ vé: Redis Lua (oversell = 0) + sổ cái Postgres, nghe `catalog.event.v1` |
 | `booking-service` | Giữ vé 10′ (idempotent, 4 vé/tài khoản/sự kiện), huỷ, tự hết hạn; bảng giá từ `catalog.event.v1`; phát `booking.event.v1` (`booking.confirmed`, Outbox) |
 | `payment-service` | Thanh toán giao thức VNPay 2.1.0 – **cổng giả lập** (IPN là nguồn sự thật, Outbox `payment.result.v1`, hoàn tiền) |
-| `notification` | Mới có khung thư mục + README, chưa có code |
+| `notification-service` | **Vé điện tử QR** (JWS ES256) khi đơn `CONFIRMED` – nghe `booking.event.v1`; `/api/tickets/**` (ADR-0009). Sau: email |
 | `libs/outbox` | Transactional Outbox dùng chung (catalog, payment) |
 | `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
 | `libs/event-contracts` | Schema event (`EventEnvelope`, `CatalogEvents`, `PaymentEvents`, `BookingEvents`) – topic `catalog.event.v1`, `payment.result.v1`, `booking.event.v1` |
@@ -68,15 +68,15 @@ docs/                    # adr/, runbooks/, postmortems/, diagrams/, setup-steps
 
 **Cần có:** Java 21, Docker Desktop **đang chạy**, `make`, IntelliJ (để debug).
 
-`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `booking-service`, `payment-service`, `frontend`, `api-gateway`, `kafka-ui` (`localhost:8091`)**. Service mới sẽ được thêm vào khi có code.
+`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `booking-service`, `payment-service`, `notification-service`, `frontend`, `api-gateway`, `kafka-ui` (`localhost:8091`)**. Service mới sẽ được thêm vào khi có code.
 Port cố định trên máy, giống nhau dù chạy trong container hay IntelliJ (đặt trước cho cả service chưa có code):
 
 | Service | Port | | Service | Port |
 |---|---|---|---|---|
-| api-gateway | 8080 | | booking-service | 8084 *(chưa có)* |
-| identity-service | 8081 | | payment-service | 8085 *(chưa có)* |
-| catalog-service | 8082 | | notification-service | 8086 *(chưa có)* |
-| inventory-service | 8083 *(chưa có)* | | postgres | 5432 |
+| api-gateway | 8080 | | booking-service | 8084 |
+| identity-service | 8081 | | payment-service | 8085 |
+| catalog-service | 8082 | | notification-service | 8086 |
+| inventory-service | 8083 | | postgres | 5432 |
 | frontend (nginx) | 8090 | | kafka-ui | 8091 |
 
 ### Lệnh `make` (gõ `make` để xem danh sách)

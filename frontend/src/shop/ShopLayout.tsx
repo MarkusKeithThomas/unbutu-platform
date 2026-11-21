@@ -28,6 +28,7 @@ export function ShopLayout({ children }: { children: ReactNode }) {
           </Link>
           <nav aria-label="Điều hướng chính" className="shop-nav">
             <NavLink to="/" end>Sự kiện</NavLink>
+            {state.status === 'authenticated' && <NavLink to="/orders">Đơn của tôi</NavLink>}
             {state.status === 'authenticated' && state.user.roles.includes('ADMIN') && <NavLink to="/admin">Quản trị</NavLink>}
             {state.status === 'authenticated' ? (
               <>

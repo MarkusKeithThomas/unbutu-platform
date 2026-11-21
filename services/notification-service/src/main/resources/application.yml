@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/notification_db}
+    username: ${DB_USERNAME:notification}
+    password: ${DB_PASSWORD:notification}
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:redpanda:9092}
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest     # lần đầu: phát vé cho mọi đơn đã CONFIRMED còn trong topic (giữ 30 ngày)
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        session.timeout.ms: 60000     # static membership (group.instance.id ở @KafkaListener) – deploy không rebalance
+    listener:
+      ack-mode: record
+
+notification:
+  kafka:
+    instance-id: ${KAFKA_GROUP_INSTANCE_ID:notification-1}   # mỗi instance chạy cùng lúc một id khác
+  jwt:
+    jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
+    issuer: ${JWT_ISSUER:unbutu-identity}
+  qr:
+    # Private key EC P-256 ký QR (ES256): base64 DER PKCS#8. Prod: AWS Secrets Manager (ADR-0004).
+    # Không có → chỉ local/test được tự sinh key tạm (QR cũ không verify được sau restart).
+    signing-key: ${QR_SIGNING_KEY:}
+    key-id: ${QR_KEY_ID:qr-1}
+    allow-ephemeral-key: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

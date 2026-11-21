@@ -1,0 +1,17 @@
+# Profile "local": chạy trong IntelliJ (SPRING_PROFILES_ACTIVE=local). Bảng port: README.md.
+server:
+  port: 8086
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/notification_db
+    username: notification
+    password: notification
+  kafka:
+    bootstrap-servers: localhost:19092
+
+notification:
+  jwt:
+    jwk-set-uri: http://localhost:8081/.well-known/jwks.json
+  qr:
+    allow-ephemeral-key: true

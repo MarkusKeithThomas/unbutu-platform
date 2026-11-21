@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { bookings, errorMessage, type Booking } from '../api';
+import { bookings, errorMessage, tickets as ticketApi, type Booking, type Ticket } from '../api';
 import { useAuth } from '../auth';
 import { saveCart } from './cart';
 import { ShopLayout, vnd } from './ShopLayout';
+import { TicketCard } from './TicketQr';
 
 /** Trình duyệt về từ cổng: kết quả do IPN quyết (server→server) → poll đơn mỗi 2 s, tối đa ~60 s (A11). */
 const POLL_MS = 2000;
@@ -11,12 +12,53 @@ const MAX_POLLS = 30;
 
 const FINAL = new Set(['CONFIRMED', 'REFUNDED', 'EXPIRED', 'CANCELLED', 'PENDING']);
 
+/** Vé phát bất đồng bộ sau CONFIRMED (booking → Kafka → notification), thường < 1 s → poll 1 s, tối đa ~30 s. */
+const TICKET_POLL_MS = 1000;
+const MAX_TICKET_POLLS = 30;
+
+function useTickets(bookingId: string, enabled: boolean) {
+  const { withToken } = useAuth();
+  const [list, setList] = useState<Ticket[] | null>(null);
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    let timer: number | undefined;
+    let n = 0;
+    const tick = async () => {
+      n += 1;
+      try {
+        const r = await withToken((t) => ticketApi.ofBooking(t, bookingId));
+        if (!alive) return;
+        if (r.tickets.length > 0) {
+          setList(r.tickets);
+          return;
+        }
+      } catch {
+        // lỗi tạm (service vé đang deploy) → thử lại như khi chưa có vé
+      }
+      if (n >= MAX_TICKET_POLLS) {
+        if (alive) setGaveUp(true);
+        return;
+      }
+      timer = window.setTimeout(tick, TICKET_POLL_MS);
+    };
+    void tick();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [bookingId, enabled]);
+  return { list, gaveUp };
+}
+
 export function OrderResultPage() {
   const { id = '' } = useParams();
   const { withToken } = useAuth();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [polls, setPolls] = useState(0);
+  const issued = useTickets(id, booking?.status === 'CONFIRMED');
 
   useEffect(() => {
     let alive = true;
@@ -69,7 +111,18 @@ export function OrderResultPage() {
             <h1>Thanh toán thành công</h1>
             <p>Mã đơn <b>{booking.code}</b> · {booking.ticketCount} vé · {vnd(booking.total)}</p>
             <p className="sub">{booking.event.title}</p>
-            <p className="sub">Vé điện tử sẽ được gửi tới email của bạn (đang hoàn thiện).</p>
+            {issued.list ? (
+              <>
+                <p className="sub">Đưa mã QR của từng vé cho nhân viên soát vé. Xem lại bất cứ lúc nào trong <Link to="/orders">Đơn của tôi</Link>.</p>
+                <div className="ticket-list">
+                  {issued.list.map((t) => <TicketCard key={t.id} ticket={t} total={issued.list!.length} />)}
+                </div>
+              </>
+            ) : issued.gaveUp ? (
+              <p className="sub">Vé điện tử đang được phát hành – mở lại đơn này trong <Link to="/orders">Đơn của tôi</Link> sau ít phút.</p>
+            ) : (
+              <p className="sub" role="status"><span className="spinner sm" aria-hidden="true" /> Đang phát hành vé điện tử…</p>
+            )}
             <Link className="cta" to="/">Mua thêm vé</Link>
           </>
         ) : s === 'AWAITING_PAYMENT' ? (
