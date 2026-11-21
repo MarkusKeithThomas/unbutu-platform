@@ -12,11 +12,11 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | Thành phần | Trạng thái |
 |---|---|
 | `api-gateway` | Chạy prod. Có routing, `X-Request-Id`, timeout. Chưa có access log, JWT, CORS |
-| `catalog-service` | Chạy prod, đang có API ở bảng dưới |
+| `catalog-service` | Chạy prod: sự kiện + hạng vé (đọc công khai, ghi cần ADMIN) |
 | `identity`, `inventory`, `booking`, `payment`, `notification` | Mới có khung thư mục + README, chưa có code |
 | `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
 | `libs/event-contracts` | Mới có khung, chưa có code |
-| `frontend/` | Mới có `vercel.json` (rewrite `/api/*` → server), chưa chọn framework |
+| `frontend/` | React + Vite (nginx): đăng nhập/đăng ký, Google login, quản trị sự kiện + hạng vé |
 | CI/CD | Xong: PR → CI → merge `main` → Release (image theo digest) → Deploy **cần Approve**, tự rollback |
 | Observability | SigNoz (ADR-0006): log JSON ECS + trace + metrics (OpenTelemetry Java agent, chỉ prod) + metrics host/container, dashboard dạng code |
 
@@ -27,10 +27,14 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | GET | `/api/catalog/ping` | Kiểm tra sống (smoke test của deploy) |
 | GET | `/api/catalog/events` | Danh sách sự kiện (prod rỗng; local có dữ liệu mẫu) |
 | GET | `/api/catalog/events/{id}` | Chi tiết sự kiện |
+| GET | `/api/catalog/events/{id}/ticket-types` | Hạng vé đang bán / tạm dừng của sự kiện (không lộ bản nháp) |
+| POST · PUT · DELETE | `/api/catalog/admin/events[/{id}]` | Tạo / sửa / xoá sự kiện – **ADMIN** (xoá được khi chưa có hạng vé) |
+| GET · POST · PUT · DELETE | `/api/catalog/admin/ticket-types[/{id}]` | CRUD hạng vé – **ADMIN**. Đã từng mở bán → không xoá hẳn / không về Nháp (409) |
 | POST | `/api/identity/register` · `/login` · `/refresh` · `/logout` | Đăng ký / đăng nhập email+mật khẩu; refresh token trong cookie HttpOnly |
 | GET | `/api/identity/me` | Hồ sơ (cần `Authorization: Bearer`) |
 | GET | `/api/identity/providers` | Cách đăng nhập đang bật (`google: true/false`) |
 | GET | `/api/identity/oauth2/authorization/google` | Bắt đầu login Google (redirect) |
+| GET | `/admin/events`, `/admin/ticket-types` | UI quản trị (chỉ ADMIN) |
 | GET | `/`, `/login`, `/register` | UI (container `frontend`, gateway route mọi path không phải `/api/**`) |
 
 ## Công nghệ

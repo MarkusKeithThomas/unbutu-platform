@@ -13,6 +13,8 @@ type AuthContextValue = {
   /** Lấy access token từ refresh cookie (khi mở trang, sau login Google). */
   restore: () => Promise<boolean>;
   logout: () => Promise<void>;
+  /** Gọi API cần đăng nhập: gắn access token; gặp 401 (token hết hạn) → refresh 1 lần rồi gọi lại. */
+  withToken: <T>(call: (token: string) => Promise<T>) => Promise<T>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,6 +69,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     restore,
     login: async (email, password, rememberMe) => apply(await api.login(email, password, rememberMe)),
     register: async (email, password, fullName) => apply(await api.register(email, password, fullName)),
+    withToken: async (call) => {
+      const token = state.status === 'authenticated' ? state.accessToken : null;
+      if (token) {
+        try {
+          return await call(token);
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 401)) throw e;
+        }
+      }
+      const t = await refreshOnce();
+      apply(t);
+      if (!t) throw new ApiError(401, undefined, 'Phiên đăng nhập đã hết hạn');
+      return call(t.accessToken);
+    },
     logout: async () => {
       try {
         await api.logout();

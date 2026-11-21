@@ -11,3 +11,7 @@ spring:
     password: catalog
   flyway:
     locations: classpath:db/migration,classpath:db/seed-local   # + dữ liệu mẫu (prod không có)
+
+catalog:
+  jwt:
+    jwk-set-uri: http://localhost:8081/.well-known/jwks.json   # identity (container hoặc IntelliJ) mở cổng 8081

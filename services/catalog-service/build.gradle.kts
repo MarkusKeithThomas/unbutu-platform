@@ -5,6 +5,9 @@ plugins {
 dependencies {
     implementation(project(":libs:platform-starter"))   // X-Request-Id → MDC, RestClient propagate
     implementation(libs.spring.boot.starter.webmvc)
+    implementation(libs.spring.boot.starter.validation)
+    implementation(libs.spring.boot.starter.security)
+    implementation(libs.spring.boot.starter.security.oauth2.resource.server)   // verify access token (JWKS của identity)
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.database.postgresql)

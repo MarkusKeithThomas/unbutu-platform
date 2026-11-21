@@ -8,6 +8,7 @@ html, body, #root { margin: 0; min-height: 100%; }
 body { font-family: Inter, system-ui, sans-serif; color: var(--ink); background: var(--bg); }
 a { color: var(--brand-ink); }
 .display { font-family: 'Space Grotesk', sans-serif; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .auth { min-height: 100vh; display: flex; flex-wrap: wrap; }
 .intro { flex: 1 1 480px; min-width: 0; background: var(--ink); color: #F9FAFB; padding: 48px 56px;

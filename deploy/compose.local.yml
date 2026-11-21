@@ -40,6 +40,10 @@ services:
       DB_USERNAME: catalog
       DB_PASSWORD: catalog
       SPRING_FLYWAY_LOCATIONS: classpath:db/migration,classpath:db/seed-local   # + dữ liệu mẫu (prod không có)
+      # Public key verify access token. `make ide s=identity-service` → http://host.docker.internal:8081
+      IDENTITY_JWKS_URI: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}/.well-known/jwks.json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:8082:8080"   # port cố định của catalog (service chạy trong IntelliJ gọi vào đây)
     depends_on:
