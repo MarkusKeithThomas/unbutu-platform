@@ -1,5 +1,6 @@
 package com.unbutu.ticket.identity.token;
 
+import com.nimbusds.jose.jwk.RSAKey;
 import com.unbutu.ticket.identity.user.User;
 import java.time.Clock;
 import java.time.Instant;
@@ -21,6 +22,7 @@ public class AccessTokenService {
 
     private final JwtEncoder encoder;
     private final JwtProperties props;
+    private final RSAKey signingKey;     // kid lấy từ chính key ký (local: kid theo thumbprint, đổi mỗi lần sinh key)
     private final Clock clock;
 
     public AccessToken issue(User user) {
@@ -35,7 +37,7 @@ public class AccessTokenService {
                 .claim("email", user.getEmail())
                 .claim("roles", user.roleList())
                 .build();
-        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(props.keyId()).build();
+        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId(signingKey.getKeyID()).build();
         String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
         return new AccessToken(token, props.accessTokenTtl().toSeconds());
     }

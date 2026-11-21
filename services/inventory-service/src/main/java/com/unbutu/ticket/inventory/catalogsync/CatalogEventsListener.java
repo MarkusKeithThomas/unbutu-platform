@@ -24,7 +24,7 @@ class CatalogEventsListener {
     private final StockLedger ledger;
     private final StockStore store;
 
-    @KafkaListener(topics = CatalogEvents.TOPIC)
+    @KafkaListener(topics = CatalogEvents.TOPIC, properties = "group.instance.id=${inventory.kafka.instance-id}-catalog")
     void onMessage(String value) {
         JsonNode envelope = json.readTree(value);
         String type = envelope.path("type").asString();

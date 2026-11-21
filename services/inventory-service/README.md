@@ -16,6 +16,8 @@
   Mọi thay đổi số vé = 1 Lua script (`src/main/resources/redis/*.lua`) → **oversell = 0** (đo: 100 request song song / 10 vé → đúng 10 thành công).
 - **Postgres `inventory_db`** (`stock`): sổ cái bền – tổng, đã bán, trạng thái. Redis trống → dựng lại `còn lại = tổng − đã bán`.
 - Consumer **`catalog.event.v1`** (group `inventory-service`): snapshot có version → replay/đến trễ an toàn, không cần bảng dedupe.
+  Static membership: `group.instance.id=${inventory.kafka.instance-id}-catalog` (env `KAFKA_GROUP_INSTANCE_ID`, mặc định
+  `inventory-1`), `session.timeout.ms` 60 s → deploy không rebalance. Scale N bản: mỗi bản một id.
 - API công khai `GET /api/inventory/events/{eventId}/availability` → `[{ticketTypeId, available, total, state: ON_SALE|LOW|SOLD_OUT|PAUSED}]`,
   `Cache-Control: public, max-age=1` (đường đọc nóng nhất lúc mở bán, chỉ chạm Redis).
 - API nội bộ (gateway không route): `POST /internal/events/{eventId}/reservations` `{reservationId, items[{ticketTypeId, quantity}], ttlSeconds}`
