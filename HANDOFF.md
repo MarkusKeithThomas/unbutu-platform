@@ -4,22 +4,24 @@
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-21.
 
 ## Đang chờ người dùng
-- Approve deploy **PAY-1c** (#36, Release đang chờ) rồi merge + Approve PR **static membership inventory + kid identity local**
-  (nhánh `fix/jwt-kid-and-inventory-static-membership`). Không cần đổi pro-ticket-workload.
-  Sau deploy Claude kiểm: topic `booking.event.v1` có trên Redpanda prod (`rpk topic list`); log booking/inventory sau deploy:
-  `instanceId=booking-1-payment-0` / `inventory-1-catalog-0`, không có "pro-actively leaving" kèm generation tăng.
-- Chạy thử 1 đơn thật trên prod (giữ → thanh toán giả lập → CONFIRMED → 1 event `booking.confirmed`) – cần tài khoản người dùng.
+- Bật kafka-ui trong tailnet: `! ssh unbutu 'sudo tailscale serve --bg --https=9443 http://127.0.0.1:8091 && tailscale serve status'`
+  → Claude kiểm từ ngoài tailnet phải thất bại (`docs/runbooks/kafka-ui.md`).
+- Release `d9dfb1f` (#39, chỉ đổi `deploy.sh` – đã cài tay lên server) chờ Approve: image không đổi, Approve hay để đó đều được.
+- Chạy thử 1 đơn thật trên prod (giữ → thanh toán giả lập → CONFIRMED → 1 event `booking.confirmed`, xem trên kafka-ui).
+- Funnel **công khai** `:10000` → `127.0.0.1:8090` (`sds-web-1`, ngoài repo này) – người dùng xác nhận có cố ý không.
 
 ## Làm tiếp
 - **Load test** (người dùng định làm) – trước khi chặn cổng giả lập (PAY-1c (3), `docs/tasks/catalog.md`).
 - **ticketing** (nghe `booking.event.v1` → vé QR) + **notification** (email). Mọi code: tự kiểm 50k rps; trước push chạy đủ như CI.
 
 ## Ghi chú
-- Local: payment_db đã có migration PAY-1b – chạy code payment cũ hơn sẽ lỗi `vnp_create_date` NOT NULL.
-- Luyện sự cố thanh toán: `docs/runbooks/payment-drills.md` (local: export MOCK_FAULT_* rồi up payment-service).
-- Kịch bản thử (scratchpad, mất khi reboot): `pay-e2e.sh`, `pay-late.sh`, `pay-faults.sh <drop|duplicate|network|badsig|wrongamount|pending|querydr|abandon>`.
-- Smoke CI local (`tools/ci/compose-smoke.sh`) cần cổng 8080 trống → `make down` trước.
-- Docker Desktop hay tự tắt → `open -a Docker`. User test local: `admin@local.test` / `Password123` (ADMIN).
+- Prod 10:35 `ef9537f` OK: static membership booking/inventory (Stable, lag 0), kafka-ui readOnly, kid prod vẫn `identity-1`.
+- 10:21 deploy `65bf7a5` lỗi pull GHCR qua IPv6 ("connection reset") ~2′ → rollback; #39: 5 lần thử, chờ tăng dần, 2 image song song.
+  Lặp lại nhiều → cân nhắc (hỏi người dùng) ưu tiên IPv4 cho Docker trên server.
+- Rollback từ bản static membership về bản cũ: group chờ member cũ ≤ 60 s (runbook kafka-ui).
+- Local: payment_db đã có migration PAY-1b. Smoke CI local cần cổng 8080 trống (`make down`). kafka-ui local: `localhost:8091`.
+- Kịch bản thử (scratchpad, mất khi reboot): `pay-e2e.sh`, `pay-late.sh`, `pay-faults.sh <…>`. Docker Desktop hay tắt → `open -a Docker`.
+- User test local: `admin@local.test` / `Password123` (ADMIN).
 
 ## Kiểm tra nhanh đầu phiên
 ```bash
