@@ -197,10 +197,10 @@ Chỉ 1 môi trường trên server (`prod`) – không có staging vì laptop k
 
 | Nhóm | Ước tính |
 |---|---|
-| prod: 7 service Spring Boot (~350 MB) + postgres + redis + rabbitmq | ~3 GB |
+| prod: 7 service Spring Boot (~350–450 MB) + postgres + redis (~128 MB) + redpanda (~600 MB) | ~4 GB |
 | observability: SigNoz – ClickHouse (limit ~2 GB) + OTel Collector + SigNoz UI/query (ADR-0006) | ~3 GB |
 | OS + Docker + Tailscale | ~1 GB |
-| **Tổng** | **~7 GB** – còn ~4 GB dư cho S4 (§8) và đỉnh tải (S1 đã nằm trong SigNoz) và đỉnh tải; vẫn cân nhắc `-XX:+UseSerialGC`, giới hạn thread pool |
+| **Tổng** | **~8 GB** (đo 2026-11-21: đang dùng 3,2 GB, còn 8,6 GB available) – còn ~3 GB dư cho S4 (§8) và đỉnh tải (S1 đã nằm trong SigNoz) và đỉnh tải; vẫn cân nhắc `-XX:+UseSerialGC`, giới hạn thread pool |
 
 ---
 
@@ -408,7 +408,8 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] 2 môi trường: **local** (MacBook) + **prod** (`unbutu`, qua CI/CD); không staging vì thiếu RAM (ADR-0003). Merge `main` → build image một lần → deploy prod cần duyệt (GitHub Environment `production`).
 - [x] Bài toán: đặt vé sự kiện/phim, 7 service (§4.2) + 2 thư viện dùng chung.
 - [x] Gradle Kotlin DSL, Java 21 (ADR-0002). Package gốc `com.unbutu.ticket`.
-- [x] Message broker: RabbitMQ.
+- [x] Message broker: ~~RabbitMQ~~ → **Redpanda (Kafka API) + Transactional Outbox** (2026-11-21, khớp thiết kế đích Kafka/MSK trong private-docs; chạy 1 node `--smp 1 --memory 512M`). Lý do đổi: event log replay được, consumer group scale ngang, cùng API với đích AWS.
+- [x] **Tồn kho** (2026-11-21): Redis + Lua giữ bộ đếm + hold có TTL (chống oversell atomic); **Postgres `inventory_db` là sổ cái** (đã bán) – Redis mất dữ liệu thì dựng lại từ Postgres. Giới hạn **4 vé / tài khoản / sự kiện** (cộng đơn đang giữ + đã thanh toán).
 - [x] **Mỗi service = 1 module = 1 image = 1 container**, cả trên server lẫn local.
 - [x] **1 container Postgres dùng chung, mỗi service 1 database + 1 user** chỉ có quyền trên database của mình (`identity_db`, `catalog_db`, ...). Service chỉ tạo/sửa bảng của mình qua Flyway riêng; không đọc bảng service khác (gọi API/nghe event).
 - [x] **Chạy local kiểu hybrid**: mặc định mọi service trong container (`make up`); service đang code chạy trong IntelliJ với profile `local` (`make ide s=<service>`), gateway trong container gọi nó qua `host.docker.internal`. Mỗi service 1 port cố định trên máy (8080 gateway, 8081 identity, 8082 catalog, 8083 inventory, 8084 booking, 8085 payment, 8086 notification). Trên server service vẫn không mở port ra ngoài.
@@ -416,6 +417,7 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] Spring Boot 4.1.2, Spring Cloud 2025.1.4 (Gateway 5.0.4), PostgreSQL 17.
 - [x] CD: deploy prod sau khi duyệt, qua Tailscale OIDC (`tag:ci`) + SSH forced command (ADR-0005).
 - [x] **Phân quyền API ghi tại service** (2026-11-21): catalog tự verify access token (RS256, JWKS nội bộ `http://identity-service:8080/.well-known/jwks.json`, `iss`, `token_use=access`), role lấy từ claim `roles`. Đường dẫn: đọc công khai `/api/catalog/**` (GET), ghi chỉ `/api/catalog/admin/**` (ADMIN). Gateway verify JWT (§4.4 P0) làm sau – service vẫn giữ kiểm tra (defense in depth).
+- [x] **Đường đọc của khách thiết kế cho 50k rps** (2026-11-21): API công khai catalog trả `Cache-Control: public, max-age=30, stale-while-revalidate` (CDN/edge gánh tải), URL không chứa thời gian/user (server tự lấy "now" làm tròn phút), phân trang Slice (không `COUNT`), 1 query có index, không N+1; API công khai không đọc token. Bước sau khi cần: cache trong app + read replica. Tồn kho realtime (A8b) tách sang inventory + Redis.
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:

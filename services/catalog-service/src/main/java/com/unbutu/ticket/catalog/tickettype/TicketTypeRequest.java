@@ -11,6 +11,7 @@ import java.util.UUID;
 public record TicketTypeRequest(
         @NotNull UUID eventId,
         @NotBlank @Size(max = 100) String name,
+        @Size(max = 255) String description,
         @Min(1) @Max(1_000_000_000) long price,          // VND
         @Min(0) @Max(1_000_000) int totalQuantity,
         @NotNull TicketType.Status status) {

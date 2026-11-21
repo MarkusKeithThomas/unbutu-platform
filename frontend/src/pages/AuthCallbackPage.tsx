@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { takeReturnTo } from '../returnTo';
 import { useAuth } from '../auth';
 
 /** Backend đã đặt refresh cookie sau login Google → đổi lấy access token rồi về trang chính. */
@@ -12,7 +13,7 @@ export function AuthCallbackPage() {
     if (started.current) return;
     started.current = true;
     restore().then((ok) =>
-      navigate(ok ? '/' : '/login?error=GOOGLE_LOGIN_FAILED', { replace: true, state: { via: 'google' } }),
+      navigate(ok ? takeReturnTo() : '/login?error=GOOGLE_LOGIN_FAILED', { replace: true }),
     );
   }, [restore, navigate]);
 

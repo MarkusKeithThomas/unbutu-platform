@@ -4,12 +4,12 @@
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-21.
 
 ## Đang chờ người dùng
-- Review + merge **PR #28** (CRUD sự kiện + hạng vé, màn `/admin/*`) → Approve deploy.
+- Merge **PR khách xem/chọn vé** (nhánh `feat/client-browse`, thay #29 – #29 đóng vì không force-push được sau khi #28 squash) → Approve deploy.
 
 ## Làm ngay sau khi deploy
 1. **CAT-1** (`docs/tasks/catalog.md`): cấp ADMIN cho tài khoản quản trị trên prod
    (`UPDATE users SET roles='CUSTOMER,ADMIN' WHERE email='…'` trong `identity_db`) → đăng nhập lại → thử `/admin/ticket-types`.
-2. Gợi ý việc tiếp: inventory-service (cột "Đã bán", CAT-2) hoặc Gateway P0 (JWT tại biên, CORS); OBS-7 (đo CPU ClickHouse) vẫn mở.
+2. Việc tiếp theo: **ORD-1a** (Redpanda + Redis vào compose local/prod + Outbox ở catalog) – quyết định đã chốt trong `docs/tasks/catalog.md` ORD-1. Thêm container prod: hỏi lại người dùng trước khi deploy. Mọi code: tự kiểm mở rộng 50k rps.
 
 ## Ghi chú local
 - DB local cũ: đã sửa checksum V1 của `catalog_db` + tạo tay user/DB `identity`. Gặp lại lỗi Flyway/DB thiếu → `make clean` (xoá hết dữ liệu local).
