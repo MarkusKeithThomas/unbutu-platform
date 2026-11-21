@@ -27,14 +27,34 @@ payment:
     tmn-code: ${PAYMENT_TMN_CODE:MOCKTMN1}
     hash-secret: ${PAYMENT_HASH_SECRET:local-dev-hash-secret-change-me}   # prod: AWS Secrets Manager (ADR-0004)
     pay-url: ${PAYMENT_PAY_URL:${payment.public-base-url}/api/payments/mock/pay}
+    # querydr (merchant_webapi). Cổng giả lập: gọi thẳng chính service; VNPay sandbox: https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
+    api-url: ${PAYMENT_API_URL:http://localhost:8080/api/payments/mock/merchant_webapi/api/transaction}
   public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}   # cổng gọi về: return URL, IPN (qua gateway)
   ui-base-url: ${UI_BASE_URL:http://localhost:8080}           # return → redirect về UI /orders/{bookingId}
   mock:
     enabled: ${PAYMENT_MOCK_ENABLED:true}
-    ipn-url: ${PAYMENT_MOCK_IPN_URL:http://localhost:8080/api/payments/vnpay/ipn}   # gọi thẳng chính service (server→server)
-    ipn-delay: ${PAYMENT_MOCK_IPN_DELAY:0ms}          # luyện sự cố: IPN đến chậm
-    ipn-drop-rate: ${PAYMENT_MOCK_IPN_DROP_RATE:0}    # luyện sự cố: tỉ lệ IPN bị mất (0..1) → cần job đối soát (PAY-1b)
     allow-late: ${PAYMENT_MOCK_ALLOW_LATE:true}       # cho trả sau hạn giữ (mô phỏng IPN trễ) → luồng còn vé / hoàn tiền
+    ipn-url: ${PAYMENT_MOCK_IPN_URL:http://localhost:8080/api/payments/vnpay/ipn}   # ngân hàng gọi merchant (server→server)
+    ipn-retry-backoff: ${MOCK_IPN_RETRY_BACKOFF:10s,30s,60s,120s,300s}   # merchant trả lỗi / timeout → gửi lại theo lịch (như VNPay), hết lịch → bỏ
+    # ---- LỖI GIẢ LẬP – mặc định tắt hết (happy case). Bật bằng env khi luyện sự cố. ----
+    # Mỗi lỗi = 1 lớp IpnFault (mock/fault/*). Thêm lỗi mới: thêm 1 lớp + 1 dòng ở đây.
+    faults:
+      ipn-drop-rate: ${MOCK_FAULT_IPN_DROP_RATE:0}                  # IPN không bao giờ tới → chỉ đối soát cứu được
+      ipn-delay: ${MOCK_FAULT_IPN_DELAY:0s}                         # IPN tới chậm (UI "đang xác nhận")
+      ipn-duplicate-rate: ${MOCK_FAULT_IPN_DUPLICATE_RATE:0}        # gửi thêm 2 bản sao → kiểm idempotency (RspCode 02)
+      ipn-network-error-rate: ${MOCK_FAULT_IPN_NETWORK_ERROR_RATE:0}   # 2 lần gửi đầu "mất mạng" → ngân hàng retry
+      ipn-bad-signature-rate: ${MOCK_FAULT_IPN_BAD_SIGNATURE_RATE:0}   # IPN sai chữ ký (97) thay bản thật → đối soát cứu
+      ipn-wrong-amount-rate: ${MOCK_FAULT_IPN_WRONG_AMOUNT_RATE:0}     # IPN sai số tiền (04) thay bản thật → đối soát cứu
+      bank-pending-rate: ${MOCK_FAULT_BANK_PENDING_RATE:0}          # ngân hàng "đang xử lý" rồi mới ra kết quả
+      bank-pending-duration: ${MOCK_FAULT_BANK_PENDING_DURATION:3m}
+      querydr-error-rate: ${MOCK_FAULT_QUERYDR_ERROR_RATE:0}        # API tra cứu lỗi 99 → job đối soát phải chịu được
+  # Đối soát: giao dịch PENDING quá pending-after → querydr; khách bỏ ngang sau hạn giữ + abandon-after → FAILED.
+  reconcile:
+    enabled: ${PAYMENT_RECONCILE_ENABLED:true}
+    interval: ${PAYMENT_RECONCILE_INTERVAL:1m}
+    pending-after: ${PAYMENT_RECONCILE_PENDING_AFTER:2m}
+    abandon-after: ${PAYMENT_RECONCILE_ABANDON_AFTER:2m}
+    batch: 100
 
 outbox:
   poll-interval: 300ms
