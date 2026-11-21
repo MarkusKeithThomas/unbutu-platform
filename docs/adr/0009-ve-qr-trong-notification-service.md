@@ -18,7 +18,7 @@ không phải gọi service khác.
 2. **QR = JWS compact ES256** `{tid, eid, tt, iat}` (header có `kid`). Cổng soát vé verify **offline** bằng JWKS công khai
    `GET /api/tickets/.well-known/jwks.json` – không làm giả/sửa được (đã kiểm: sửa hạng vé → chữ ký sai). Chống dùng 1 vé
    2 lần = check-in đánh dấu `USED` có điều kiện (làm sau).
-   Khoá: EC P-256 PKCS#8 base64 (`openssl genpkey … -outform DER`) trong Secrets Manager `QR_SIGNING_KEY` (ADR-0004);
+   Khoá: EC P-256 DER base64 (`openssl genpkey … -outform DER` – PKCS#8 (OpenSSL 4) hoặc SEC1 (OpenSSL 3), nhận cả hai) trong Secrets Manager `QR_SIGNING_KEY` (ADR-0004);
    local/test tự sinh key tạm, `kid` theo thumbprint.
 3. **API** (JWT, chỉ chủ vé): `GET /api/tickets/bookings/{bookingId}` (rỗng = chưa phát → UI poll 1 s; có vé → bất biến,
    `Cache-Control: private, max-age=300`), `GET /api/tickets/me` (Slice). Gateway: `/api/tickets/**` → notification-service.

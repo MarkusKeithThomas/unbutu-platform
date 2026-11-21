@@ -19,7 +19,7 @@
 | `GET /api/tickets/.well-known/jwks.json` | công khai | Public key verify QR (app soát vé) |
 
 - Phát vé: 1 transaction / đơn; id vé = UUID theo tên `bookingId:seq` + `UNIQUE (booking_id, seq)` → event lặp không sinh vé thứ 2.
-- QR = JWS `{tid, eid, tt, iat}`, header `kid`. Env: `QR_SIGNING_KEY` (EC P-256 PKCS#8 DER base64:
+- QR = JWS `{tid, eid, tt, iat}`, header `kid`. Env: `QR_SIGNING_KEY` (EC P-256 DER base64, PKCS#8 hoặc SEC1:
   `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -outform DER | base64`), `QR_KEY_ID` (mặc định `qr-1`).
   Khởi động ký thử + verify → khoá sai thì service không lên.
 

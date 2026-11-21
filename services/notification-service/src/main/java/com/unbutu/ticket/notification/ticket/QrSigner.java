@@ -65,7 +65,13 @@ public class QrSigner {
             String b64 = props.signingKey().replaceAll("-----(BEGIN|END) [A-Z ]*PRIVATE KEY-----", "").replaceAll("\\s", "");
             byte[] der = Base64.getDecoder().decode(b64);
             KeyFactory kf = KeyFactory.getInstance("EC");
-            ECPrivateKey priv = (ECPrivateKey) kf.generatePrivate(new PKCS8EncodedKeySpec(der));
+            ECPrivateKey priv;
+            try {
+                priv = (ECPrivateKey) kf.generatePrivate(new PKCS8EncodedKeySpec(der));
+            } catch (java.security.spec.InvalidKeySpecException notPkcs8) {
+                // OpenSSL 3.x `genpkey -outform DER` ghi SEC1 (ECPrivateKey), OpenSSL 4 ghi PKCS#8 → nhận cả hai.
+                priv = (ECPrivateKey) kf.generatePrivate(new PKCS8EncodedKeySpec(wrapSec1(der)));
+            }
             if (!Curve.forECParameterSpec(priv.getParams()).equals(Curve.P_256)) {
                 throw new IllegalStateException("QR_SIGNING_KEY phải là EC P-256 (ES256)");
             }
@@ -84,8 +90,8 @@ public class QrSigner {
     }
 
     /**
-     * PKCS#8 do {@code openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -outform DER} sinh có kèm public key
-     * (ECPrivateKey [1] BIT STRING 04‖X‖Y). Java không suy public từ private được (không có BouncyCastle) → đọc phần này,
+     * Khoá do {@code openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -outform DER} sinh (PKCS#8 hoặc SEC1 tuỳ
+     * phiên bản OpenSSL) đều có kèm public key (ECPrivateKey [1] BIT STRING 04‖X‖Y). Java không suy public từ private được (không có BouncyCastle) → đọc phần này,
      * rồi ký thử + verify lúc khởi động để chắc cặp khoá khớp.
      */
     private static ECPoint embeddedPublic(byte[] der) {
@@ -99,6 +105,31 @@ public class QrSigner {
         }
         throw new IllegalStateException("QR_SIGNING_KEY không kèm public key – tạo bằng: openssl genpkey -algorithm EC "
                 + "-pkeyopt ec_paramgen_curve:P-256 -outform DER | base64");
+    }
+
+    /** PrivateKeyInfo ::= SEQUENCE { INTEGER 0, AlgorithmIdentifier {ecPublicKey, prime256v1}, OCTET STRING sec1 } */
+    private static byte[] wrapSec1(byte[] sec1) {
+        byte[] version = {0x02, 0x01, 0x00};
+        byte[] algId = {0x30, 0x13, 0x06, 0x07, 0x2a, (byte) 0x86, 0x48, (byte) 0xce, 0x3d, 0x02, 0x01,
+                0x06, 0x08, 0x2a, (byte) 0x86, 0x48, (byte) 0xce, 0x3d, 0x03, 0x01, 0x07};
+        byte[] octet = derTlv(0x04, sec1);
+        byte[] body = new byte[version.length + algId.length + octet.length];
+        System.arraycopy(version, 0, body, 0, version.length);
+        System.arraycopy(algId, 0, body, version.length, algId.length);
+        System.arraycopy(octet, 0, body, version.length + algId.length, octet.length);
+        return derTlv(0x30, body);
+    }
+
+    private static byte[] derTlv(int tag, byte[] value) {
+        int len = value.length;
+        byte[] lenBytes = len < 0x80 ? new byte[] {(byte) len}
+                : len < 0x100 ? new byte[] {(byte) 0x81, (byte) len}
+                : new byte[] {(byte) 0x82, (byte) (len >> 8), (byte) len};
+        byte[] out = new byte[1 + lenBytes.length + len];
+        out[0] = (byte) tag;
+        System.arraycopy(lenBytes, 0, out, 1, lenBytes.length);
+        System.arraycopy(value, 0, out, 1 + lenBytes.length, len);
+        return out;
     }
 
     public String sign(UUID ticketId, UUID eventId, UUID ticketTypeId, Instant issuedAt) {
