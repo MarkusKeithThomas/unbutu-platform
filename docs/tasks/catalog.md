@@ -1,11 +1,11 @@
 # Task – catalog (sự kiện, hạng vé)
 
 ## Đang mở
-- [ ] **ROLLOUT ORD-1b + ORD-1c lên prod** (thứ tự):
-  1. Người dùng tạo 2 secret AWS (ap-southeast-1): `unbutu/prod/inventory-service` và `unbutu/prod/booking-service`, mỗi cái key `DB_PASSWORD`.
-  2. Merge + apply pro-ticket-workload **#5** (inventory). Sau đó Claude mở PR ptw cho nhánh `feat/booking-service` (đã push, nối sau #5) → merge + apply.
+- [ ] **ROLLOUT ORD-1b + ORD-1c lên prod** (unbutu-platform #33 + pro-ticket-workload #5, đã gộp):
+  1. ✅ Secret `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (Claude tạo 2026-11-21, value ngẫu nhiên – người dùng sẽ đổi).
+  2. Merge + apply pro-ticket-workload **#5**.
   3. Claude chạy `docs/runbooks/add-service-database.md` cho `inventory` và `booking`.
-  4. Chuyển unbutu-platform **#33** từ draft → ready, merge → Approve deploy. Rồi Claude đưa nhánh `feat/ord-1c-booking` lên `main` (cherry-pick, PR mới) → merge → deploy.
+  4. #33 Ready → merge → Approve deploy → Claude kiểm prod (availability, giữ vé thử, huỷ).
 - [ ] **PAY-1 – Thanh toán (sau ORD-1)** – đã chốt 2026-11-21: (1) làm SAU khi giữ vé xong; (2) **cổng giả lập trước** (payment-service tự phục vụ trang "ngân hàng giả", cùng giao thức VNPay: URL ký HMAC-SHA512, IPN server→server, return URL, chỉnh tỉ lệ lỗi/độ trễ để luyện sự cố) → **adapter VNPay sandbox sau**; (3) trả tiền **sau khi hết hạn giữ**: còn vé → giữ lại + `CONFIRMED`, hết vé → `REFUND_PENDING` + hoàn tiền tự động. API: A10 checkout (`Idempotency-Key`, bấm lại → cùng URL), A14 IPN (nguồn sự thật), A15 return (chỉ redirect). Thiết kế: private-docs/thiet-ke-ban-ve/02 §3–§5.
 - [ ] **ORD-1 – Giữ vé 10′ (PR kế tiếp)**: inventory-service + **Redis (Lua atomic, chống oversell)** – `GET /api/inventory/events/{id}/availability` (A8b, "Còn x / y"), `POST /internal/reservations`; booking-service `POST /api/bookings` (JWT + `Idempotency-Key`, ≤ 4 vé) → `PENDING` + `expiresAt`, `GET /api/bookings/{id}`, `DELETE` huỷ, hết hạn tự nhả. UI: nút "Tiếp tục thanh toán" đọc giỏ `sessionStorage cart:<eventId>`. Thiết kế: private-docs/thiet-ke-ban-ve/02 §1, §3, §6. **Đã chốt 2026-11-21**: (1) catalog → inventory/booking qua **Redpanda + Outbox** (`catalog.event.v1`: `ticket-type.upserted` giá + tổng số); (2) **Redis Lua giữ chỗ, Postgres là sổ cái**; (3) **4 vé / tài khoản / sự kiện**; (4) có UI bước 2 (form người mua + đếm ngược 10′ + "← Chọn lại vé" = huỷ giữ); nút "Xác nhận thanh toán" để PR thanh toán.
   Tách: ~~ORD-1a~~ → ~~ORD-1b~~ → ~~ORD-1c~~ (xong code 2026-11-21, chờ rollout). Mô tả ORD-1c gốc: `POST /api/bookings` (JWT, `Idempotency-Key`, 4 vé/tài khoản/sự kiện, giá từ bảng sao chép `catalog.event.v1`) → gọi inventory `POST /internal/events/{e}/reservations` (reservationId = bookingId) → `PENDING` + `expiresAt`; `GET /api/bookings/{id}`, `GET /api/bookings/me`, `DELETE` (huỷ → nhả vé), hết hạn → `EXPIRED`; UI bước 2 (form người mua + đếm ngược + "← Chọn lại vé").

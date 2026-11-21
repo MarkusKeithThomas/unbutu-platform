@@ -3,13 +3,13 @@
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-21.
 
-## Đang chờ người dùng – ROLLOUT inventory + booking (thứ tự, xem `docs/tasks/catalog.md` mục ROLLOUT)
-1. Tạo 2 secret AWS: `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (key `DB_PASSWORD`).
-2. Merge + apply **pro-ticket-workload #5** → Claude mở PR ptw từ nhánh `feat/booking-service` (đã push) → merge + apply.
+## Đang chờ người dùng – ROLLOUT inventory + booking (đã gộp: unbutu-platform #33 + pro-ticket-workload #5)
+1. ✅ Secret AWS `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (Claude tạo, value ngẫu nhiên – người dùng sẽ đổi;
+   đổi thì đổi cả password user Postgres – runbook mục "rotate").
+2. Merge + apply **pro-ticket-workload #5**.
 3. Claude tạo DB `inventory`, `booking` trên prod (`docs/runbooks/add-service-database.md`).
-4. unbutu-platform **#33** (draft, inventory) → Ready → merge → Approve deploy.
-5. Claude đưa nhánh **`feat/ord-1c-booking`** (đã push, CHƯA mở PR – nối sau #33) lên `main`: nhánh mới từ main + cherry-pick → PR → merge → deploy.
-   **Bài học #32**: PR xếp chồng merge vào nhánh cũ sau khi PR dưới đã squash → mất khỏi main. Chỉ mở PR khi base đã là `main`.
+4. **#33** draft → Ready → merge → Approve deploy → Claude kiểm prod.
+   Bài học #32: PR xếp chồng merge vào nhánh cũ sau khi PR dưới squash → mất khỏi main. Chỉ mở PR khi base là `main`.
 
 ## Làm tiếp
 - **PAY-1** – cổng giả lập (quyết định đã chốt trong `docs/tasks/catalog.md`). Mọi code: tự kiểm 50k rps; trước push chạy đủ như CI.

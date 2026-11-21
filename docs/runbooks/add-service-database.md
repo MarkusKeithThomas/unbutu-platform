@@ -30,3 +30,9 @@ EOS
 ssh unbutu 'docker exec prod-postgres-1 psql -U postgres -tAc "select datname from pg_database where datname = '"'"'inventory_db'"'"'"'
 ```
 Sau đó mới merge PR service → deploy (Flyway của service tự tạo bảng).
+
+## Đổi mật khẩu DB của service (rotate)
+Password nằm ở **2 nơi** phải khớp: secret AWS (service đọc lúc deploy) và user Postgres. Thứ tự để không gián đoạn:
+1. Đổi value secret `unbutu/prod/<svc>-service` → `DB_PASSWORD` trên Console.
+2. Đổi password user Postgres bằng đúng value mới (pipe từ Secrets Manager như trên, câu `ALTER USER :"svc" WITH PASSWORD :'pw';`).
+3. Deploy lại (hoặc `deploy.sh` với images.env hiện tại) để service nhận env mới. Kết nối cũ trong pool vẫn chạy tới khi restart.
