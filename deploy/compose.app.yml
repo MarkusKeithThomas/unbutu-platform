@@ -124,6 +124,16 @@ services:
       <<: *otel-env
       OTEL_SERVICE_NAME: inventory-service
 
+  booking-service:
+    <<: *service
+    image: ${BOOKING_SERVICE_IMAGE:?Thiếu BOOKING_SERVICE_IMAGE trong images.env}
+    env_file:
+      - path: env/booking-service.env
+        format: raw
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: booking-service
+
   catalog-service:
     <<: *service
     image: ${CATALOG_SERVICE_IMAGE:?Thiếu CATALOG_SERVICE_IMAGE trong images.env}

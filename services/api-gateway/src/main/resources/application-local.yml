@@ -10,5 +10,7 @@ services:
     url: http://localhost:8081
   inventory:
     url: http://localhost:8083
+  booking:
+    url: http://localhost:8084
   frontend:
     url: http://localhost:8090

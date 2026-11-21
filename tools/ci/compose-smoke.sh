@@ -42,16 +42,23 @@ export FRONTEND_IMAGE=frontend:ci APP_VERSION=ci
 
 # ---------- 2. env/<service>.env – cùng tên biến với env-map prod ----------
 rand() { openssl rand -hex 16; }
-DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand)
+DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand); DB_BOOKING=$(rand)
 JWT_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER 2>/dev/null | base64 | tr -d '\n')
 mkdir -p deploy/env
 cat >deploy/env/postgres.env <<ENV
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$(rand)
-SERVICE_DATABASES=catalog identity inventory
+SERVICE_DATABASES=catalog identity inventory booking
 CATALOG_DB_PASSWORD=$DB_CATALOG
 IDENTITY_DB_PASSWORD=$DB_IDENTITY
 INVENTORY_DB_PASSWORD=$DB_INVENTORY
+BOOKING_DB_PASSWORD=$DB_BOOKING
+ENV
+cat >deploy/env/booking-service.env <<ENV
+ENVIRONMENT=prod
+DB_URL=jdbc:postgresql://postgres:5432/booking_db
+DB_USERNAME=booking
+DB_PASSWORD=$DB_BOOKING
 ENV
 cat >deploy/env/inventory-service.env <<ENV
 ENVIRONMENT=prod
@@ -137,5 +144,12 @@ expect "refresh token cũ dùng lại → 401" 401 -X POST -H "Cookie: refresh_t
 expect "/me có token"                200 -H "Authorization: Bearer $ACCESS" "$BASE/api/identity/me"
 [[ $(jq -r .email <<<"$BODY") == "$EMAIL" ]] || fail "/me trả sai email"
 expect "/me không token → 401"       401 "$BASE/api/identity/me"
+expect "đơn của tôi (có token) → trang rỗng" 200 -H "Authorization: Bearer $ACCESS" "$BASE/api/bookings/me"
+[[ $(jq -r '.items | length' <<<"$BODY") == 0 ]] || fail "user mới phải chưa có đơn"
+expect "đơn của tôi không token → 401" 401 "$BASE/api/bookings/me"
+NO_EVENT='{"eventId":"00000000-0000-0000-0000-000000000001","items":[{"ticketTypeId":"00000000-0000-0000-0000-000000000002","quantity":1}]}'
+expect "giữ vé thiếu Idempotency-Key → 400" 400 -H "Authorization: Bearer $ACCESS" "${JSON[@]}" -X POST "$BASE/api/bookings" -d "$NO_EVENT"
+expect "giữ vé hạng không tồn tại → 409" 409 -H "Authorization: Bearer $ACCESS" -H "Idempotency-Key: smoke-key-$RANDOM" "${JSON[@]}" \
+    -X POST "$BASE/api/bookings" -d "$NO_EVENT"
 
 log "SMOKE TEST ĐẠT – stack compose.app.yml chạy được như deploy"

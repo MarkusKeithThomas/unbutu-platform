@@ -3,24 +3,22 @@
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-21.
 
-## Đang chờ người dùng (theo thứ tự)
-1. Merge **PR #31** (ORD-1a Redpanda + Outbox) → Approve deploy. Sau deploy Claude kiểm:
-   `ssh unbutu 'docker exec prod-redpanda-1 rpk topic list; docker logs prod-catalog-service-1 2>&1 | grep Outbox: | tail -2'`
-2. Rollout **ORD-1b** (PR inventory, nhánh `feat/ord-1b-inventory`, base = nhánh #31):
-   a. Người dùng tạo secret AWS `unbutu/prod/inventory-service`, key `DB_PASSWORD` (vd. `openssl rand -hex 24`).
-   b. Merge + apply **pro-ticket-workload PR #5** (env-map inventory, postgres `SERVICE_DATABASES`).
-   c. Claude chạy `docs/runbooks/add-service-database.md` (tạo user/DB `inventory` trên prod).
-   d. Khi #31 đã merge: Claude tạo nhánh mới từ `main` + cherry-pick commit ORD-1b (không force-push được), mở PR mới, đóng PR cũ.
-   e. Merge PR inventory → Approve deploy (thêm container `redis` + `inventory-service`).
+## Đang chờ người dùng – ROLLOUT inventory + booking (thứ tự, xem `docs/tasks/catalog.md` mục ROLLOUT)
+1. Tạo 2 secret AWS: `unbutu/prod/inventory-service`, `unbutu/prod/booking-service` (key `DB_PASSWORD`).
+2. Merge + apply **pro-ticket-workload #5** → Claude mở PR ptw từ nhánh `feat/booking-service` (đã push) → merge + apply.
+3. Claude tạo DB `inventory`, `booking` trên prod (`docs/runbooks/add-service-database.md`).
+4. unbutu-platform **#33** (draft, inventory) → Ready → merge → Approve deploy.
+5. Claude đưa nhánh **`feat/ord-1c-booking`** (đã push, CHƯA mở PR – nối sau #33) lên `main`: nhánh mới từ main + cherry-pick → PR → merge → deploy.
+   **Bài học #32**: PR xếp chồng merge vào nhánh cũ sau khi PR dưới đã squash → mất khỏi main. Chỉ mở PR khi base đã là `main`.
 
 ## Làm tiếp
-- **ORD-1c** booking-service + UI bước 2 (`docs/tasks/catalog.md`) → rồi **PAY-1**. Mọi code: tự kiểm 50k rps.
+- **PAY-1** – cổng giả lập (quyết định đã chốt trong `docs/tasks/catalog.md`). Mọi code: tự kiểm 50k rps; trước push chạy đủ như CI.
 
 ## Ghi chú local
-- DB local cũ sửa tay (checksum V1 catalog, user/DB identity + inventory tạo tay). Lỗi Flyway/DB → `make clean`.
-- Kafka `localhost:19092`, Redis `localhost:6379`, inventory `localhost:8083` (API nội bộ gọi thẳng port này để thử).
-- `rpk topic consume` không có `-n` sẽ chờ mãi.
-- User test local: `admin@local.test` / `Password123` (ADMIN). Local có hạng vé thử "Oversell test …", "Semantics …".
+- DB local cũ sửa tay (checksum V1 catalog; user/DB identity, inventory, booking tạo tay). Lỗi Flyway/DB → `make clean`.
+- Kafka `localhost:19092`, Redis `localhost:6379`, inventory `:8083`, booking `:8084`.
+- Kịch bản thử booking: `bash <scratchpad>/booking-e2e.sh` (mất khi reboot – nội dung trong PR ORD-1c).
+- User test local: `admin@local.test` / `Password123` (ADMIN).
 
 ## Kiểm tra nhanh đầu phiên
 ```bash

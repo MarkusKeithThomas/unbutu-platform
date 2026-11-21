@@ -14,7 +14,8 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | `api-gateway` | Chạy prod. Có routing, `X-Request-Id`, timeout. Chưa có access log, JWT, CORS |
 | `catalog-service` | Chạy prod: sự kiện + hạng vé (đọc công khai, ghi cần ADMIN) |
 | `inventory-service` | Tồn kho + giữ vé: Redis Lua (oversell = 0) + sổ cái Postgres, nghe `catalog.event.v1` |
-| `booking`, `payment`, `notification` | Mới có khung thư mục + README, chưa có code |
+| `booking-service` | Giữ vé 10′ (idempotent, 4 vé/tài khoản/sự kiện), huỷ, tự hết hạn; bảng giá từ `catalog.event.v1` |
+| `payment`, `notification` | Mới có khung thư mục + README, chưa có code |
 | `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
 | `libs/event-contracts` | Schema event (`EventEnvelope`, `CatalogEvents`) – topic `catalog.event.v1` |
 | `frontend/` | React + Vite (nginx): đăng nhập/đăng ký, Google login, quản trị sự kiện + hạng vé |
@@ -32,12 +33,13 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | GET · POST · PUT · DELETE | `/api/catalog/admin/events[/{id}]` | Danh sách đầy đủ / tạo / sửa / xoá sự kiện – **ADMIN** (xoá được khi chưa có hạng vé) |
 | GET · POST · PUT · DELETE | `/api/catalog/admin/ticket-types[/{id}]` | CRUD hạng vé – **ADMIN**. Đã từng mở bán → không xoá hẳn / không về Nháp (409) |
 | GET | `/api/inventory/events/{id}/availability` | "Còn x / y" realtime của từng hạng vé (`Cache-Control: public, max-age=1`) |
+| POST · GET · DELETE | `/api/bookings` (+ `Idempotency-Key`), `/api/bookings/{id}`, `/api/bookings/me` | Giữ vé 10′ / xem đơn / huỷ – cần đăng nhập |
 | POST | `/api/identity/register` · `/login` · `/refresh` · `/logout` | Đăng ký / đăng nhập email+mật khẩu; refresh token trong cookie HttpOnly |
 | GET | `/api/identity/me` | Hồ sơ (cần `Authorization: Bearer`) |
 | GET | `/api/identity/providers` | Cách đăng nhập đang bật (`google: true/false`) |
 | GET | `/api/identity/oauth2/authorization/google` | Bắt đầu login Google (redirect) |
 | GET | `/admin/events`, `/admin/ticket-types` | UI quản trị (chỉ ADMIN) |
-| GET | `/`, `/events/{id}` | UI khách: danh sách sự kiện, chọn vé (tối đa 4 vé/đơn) – không cần đăng nhập |
+| GET | `/`, `/events/{id}`, `/checkout/{bookingId}` | UI khách: danh sách sự kiện, chọn vé, bước 2 (đếm ngược giữ vé, thông tin người mua) |
 | GET | `/login`, `/register` | UI (container `frontend`, gateway route mọi path không phải `/api/**`) |
 
 ## Công nghệ
@@ -62,7 +64,7 @@ docs/                    # adr/, runbooks/, postmortems/, diagrams/, setup-steps
 
 **Cần có:** Java 21, Docker Desktop **đang chạy**, `make`, IntelliJ (để debug).
 
-`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `frontend`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
+`compose.local.yml` hiện chạy **`postgres`, `redpanda` (Kafka `localhost:19092`), `redis` (`localhost:6379`), `identity-service`, `catalog-service`, `inventory-service`, `booking-service`, `frontend`, `api-gateway`**. Service mới sẽ được thêm vào khi có code.
 Port cố định trên máy, giống nhau dù chạy trong container hay IntelliJ (đặt trước cho cả service chưa có code):
 
 | Service | Port | | Service | Port |

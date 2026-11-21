@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: booking-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/booking_db}
+    username: ${DB_USERNAME:booking}
+    password: ${DB_PASSWORD:booking}
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:redpanda:9092}
+    consumer:
+      group-id: booking-service
+      auto-offset-reset: earliest     # lần đầu: đọc topic từ đầu để dựng bảng giá
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+
+booking:
+  jwt:
+    jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
+    issuer: ${JWT_ISSUER:unbutu-identity}
+  inventory-url: ${INVENTORY_SERVICE_URL:http://inventory-service:8080}
+  hold-ttl: 10m
+  max-tickets-per-user-event: 4
+  service-fee-per-ticket: 10000       # VND
+  expiry-interval: 5s
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

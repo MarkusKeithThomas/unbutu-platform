@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ApiError, catalog, errorMessage, inventory, type Availability, type CatalogEvent, type PublicTicketType } from '../api';
+import { ApiError, bookings, catalog, errorMessage, inventory, type Availability, type CatalogEvent, type PublicTicketType } from '../api';
 import { useAuth } from '../auth';
 import { setReturnTo } from '../returnTo';
 import { MAX_TICKETS_PER_ORDER, SERVICE_FEE_PER_TICKET, cartCount, loadCart, saveCart, type Cart } from './cart';
@@ -13,7 +13,7 @@ const POLL_MS = 5000;
 /** Bước 1 – chọn vé. Bước giữ vé 10′ + thanh toán: PR sau (POST /api/bookings). */
 export function EventPage() {
   const { id = '' } = useParams();
-  const { state } = useAuth();
+  const { state, withToken } = useAuth();
   const navigate = useNavigate();
   const [event, setEvent] = useState<CatalogEvent | null>(null);
   const [types, setTypes] = useState<PublicTicketType[] | null>(null);
@@ -21,6 +21,10 @@ export function EventPage() {
   const [cart, setCart] = useState<Cart>(() => loadCart(id));
   const [toast, setToast] = useState<string | null>(null);
   const [stock, setStock] = useState<Record<string, Availability>>({});
+  const [holding, setHolding] = useState(false);
+  // 1 key cho 1 lựa chọn: bấm lại / mạng lỗi rồi thử lại → cùng key → server trả cùng đơn (không giữ vé 2 lần).
+  // Đổi lựa chọn → key mới.
+  const holdKey = useRef<{ cart: string; key: string } | null>(null);
 
   // Tồn kho realtime: lỗi inventory không chặn trang (vẫn chọn được theo tổng số vé), chỉ thiếu dòng "Còn x / y".
   useEffect(() => {
@@ -67,7 +71,7 @@ export function EventPage() {
   useEffect(() => saveCart(id, cart), [id, cart]);
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 2600);
+    const t = window.setTimeout(() => setToast(null), 4000);
     return () => window.clearTimeout(t);
   }, [toast]);
 
@@ -98,7 +102,21 @@ export function EventPage() {
       navigate('/login');
       return;
     }
-    setToast('Bước giữ vé & thanh toán sẽ có ở bản cập nhật tới. Lựa chọn của bạn đã được lưu.');
+    const items = Object.entries(cart).map(([ticketTypeId, quantity]) => ({ ticketTypeId, quantity }));
+    const sig = JSON.stringify(items);
+    if (holdKey.current?.cart !== sig) holdKey.current = { cart: sig, key: crypto.randomUUID() };
+    const key = holdKey.current.key;
+    setHolding(true);
+    withToken((t) => bookings.create(t, key, id, items))
+      .then((b) => navigate(`/checkout/${b.id}`))
+      .catch((e) => {
+        if (e instanceof ApiError && (e.code === 'SOLD_OUT' || e.code === 'NOT_ON_SALE' || e.code === 'LIMIT_EXCEEDED')) {
+          holdKey.current = null; // lựa chọn này đã bị từ chối hẳn → lần sau là yêu cầu mới
+          void inventory.availability(id).then((l) => setStock(Object.fromEntries(l.map((a) => [a.ticketTypeId, a])))).catch(() => {});
+        }
+        setToast(errorMessage(e));
+      })
+      .finally(() => setHolding(false));
   };
 
   if (error) {
@@ -193,8 +211,8 @@ export function EventPage() {
             <div><span>Phí dịch vụ</span><span>{vnd(fee)}</span></div>
           </div>
           <div className="total"><span>Tổng cộng</span><strong>{vnd(subtotal + fee)}</strong></div>
-          <button type="button" className="btn btn-primary" disabled={count === 0} onClick={proceed}>
-            {state.status === 'authenticated' || count === 0 ? 'Tiếp tục thanh toán' : 'Đăng nhập để tiếp tục'}
+          <button type="button" className="btn btn-primary" disabled={count === 0 || holding} onClick={proceed}>
+            {holding ? 'Đang giữ vé…' : state.status === 'authenticated' || count === 0 ? 'Tiếp tục thanh toán' : 'Đăng nhập để tiếp tục'}
           </button>
           <p className="hint">Giá và phí chính thức được xác nhận ở bước thanh toán.</p>
         </aside>
