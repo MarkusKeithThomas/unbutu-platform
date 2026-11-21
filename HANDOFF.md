@@ -3,11 +3,10 @@
 > Chỉ ghi việc tiếp theo. Cuối mỗi phiên **viết đè** file này. Không chép task đã xong.
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-22.
 
-## Làm tiếp – Load test (`docs/tasks/loadtest.md`)
-Đã chốt: k6 chạy trên unbutu (giới hạn CPU), quyền chạy = role `LOADTEST`, thứ tự A → B → C.
-1. **LT-1 = OBS-5** (DOING, `docs/tasks/observability.md`): PR #43 dashboard `service-red.json` → người dùng import + soát;
-   3 alert rule chỉ trên UI SigNoz (runbook `signoz.md` §Alert) → diễn tập tắt catalog.
-2. LT-2 giới hạn tài nguyên container prod → LT-3 dữ liệu test → LT-4 chặn cổng giả lập → LT-5 kịch bản k6 → LT-6 chạy tay, đặt trần.
+## Làm tiếp – Load test (`docs/tasks/loadtest.md`, runbook `docs/runbooks/loadtest.md`)
+1. **LT-A** (người dùng): `make loadtest STEPS=100,200,400,800` (Terminal thật – cần TTY cho ssh -t), mở http://localhost:5665;
+   dò quanh bậc FAIL; Claude đọc SigNoz (Service RED + Container) tìm nghẽn → `docs/loadtest/baseline.md`.
+2. LT-B kịch bản giữ vé / mua vé; LT-C nút bấm trên web (khi cần); LT-D alert SigNoz (hoãn).
 
 ## Song song / sau
 - TIX-2: check-in, email vé, `booking.refunded` → VOID (`docs/tasks/catalog.md`).

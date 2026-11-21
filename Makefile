@@ -25,7 +25,7 @@ jar_tasks = $(foreach a,$(filter-out $(INFRA),$(1)),:services:$(a):bootJar)
 ide_env   = $(foreach a,$(1),$(shell echo $(a) | sed 's/-service$$//' | tr 'a-z-' 'A-Z_')_SERVICE_URL=http://host.docker.internal:$(PORT_$(a)))
 
 .DEFAULT_GOAL := help
-.PHONY: help build test jar up down restart ide logs ps clean
+.PHONY: help build test jar up down restart ide logs ps clean loadtest
 
 help: ## Liệt kê các lệnh
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-8s %s\n", $$1, $$2}'
@@ -68,3 +68,7 @@ ps: ## Trạng thái container
 
 clean: ## Tắt container VÀ xoá dữ liệu DB (volume) – Postgres sẽ khởi tạo lại từ đầu
 	$(COMPOSE) down -v
+
+loadtest: ## Load test k6 theo bậc + dashboard localhost:5665 (STEPS=50,100,200 STEP_TIME=30s TARGET=prod|local)
+	@STEPS="$(STEPS)" STEP_TIME="$(STEP_TIME)" P95_MS="$(P95_MS)" MAX_ERR_PCT="$(MAX_ERR_PCT)" STOP_ON_FAIL="$(STOP_ON_FAIL)" \
+	  MAX_RPS="$(MAX_RPS)" SCENARIO="$(or $(SCENARIO),browse)" TARGET="$(or $(TARGET),prod)" ./loadtest/run.sh
