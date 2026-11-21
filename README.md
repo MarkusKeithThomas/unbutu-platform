@@ -14,12 +14,12 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | `api-gateway` | Chạy prod. Có routing, `X-Request-Id`, timeout. Chưa có access log, JWT, CORS |
 | `catalog-service` | Chạy prod: sự kiện + hạng vé (đọc công khai, ghi cần ADMIN) |
 | `inventory-service` | Tồn kho + giữ vé: Redis Lua (oversell = 0) + sổ cái Postgres, nghe `catalog.event.v1` |
-| `booking-service` | Giữ vé 10′ (idempotent, 4 vé/tài khoản/sự kiện), huỷ, tự hết hạn; bảng giá từ `catalog.event.v1` |
+| `booking-service` | Giữ vé 10′ (idempotent, 4 vé/tài khoản/sự kiện), huỷ, tự hết hạn; bảng giá từ `catalog.event.v1`; phát `booking.event.v1` (`booking.confirmed`, Outbox) |
 | `payment-service` | Thanh toán giao thức VNPay 2.1.0 – **cổng giả lập** (IPN là nguồn sự thật, Outbox `payment.result.v1`, hoàn tiền) |
 | `notification` | Mới có khung thư mục + README, chưa có code |
 | `libs/outbox` | Transactional Outbox dùng chung (catalog, payment) |
 | `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
-| `libs/event-contracts` | Schema event (`EventEnvelope`, `CatalogEvents`) – topic `catalog.event.v1` |
+| `libs/event-contracts` | Schema event (`EventEnvelope`, `CatalogEvents`, `PaymentEvents`, `BookingEvents`) – topic `catalog.event.v1`, `payment.result.v1`, `booking.event.v1` |
 | `frontend/` | React + Vite (nginx): đăng nhập/đăng ký, Google login, quản trị sự kiện + hạng vé |
 | CI/CD | Xong: PR → CI → merge `main` → Release (image theo digest) → Deploy **cần Approve**, tự rollback |
 | Observability | SigNoz (ADR-0006): log JSON ECS + trace + metrics (OpenTelemetry Java agent, chỉ prod) + metrics host/container, dashboard dạng code |

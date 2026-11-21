@@ -15,10 +15,24 @@ spring:
       auto-offset-reset: earliest     # lần đầu: đọc topic từ đầu để dựng bảng giá
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        # Static membership (KIP-345): mỗi listener có group.instance.id cố định (booking.kafka.instance-id + hậu tố,
+        # xem @KafkaListener). Deploy = tắt rồi bật lại cùng id → broker giữ nguyên partition, KHÔNG rebalance
+        # (trước đây ~20–45 s đơn chậm xác nhận). Nằm ngoài nhóm > session.timeout mới bị coi là chết → chia lại.
+        session.timeout.ms: 60000
+    producer:                         # outbox → booking.event.v1
+      acks: all
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
     listener:
       ack-mode: record
 
 booking:
+  kafka:
+    # Phải KHÁC NHAU giữa các instance chạy cùng lúc (scale N bản: booking-1..N, vd. ordinal StatefulSet);
+    # 2 instance trùng id → broker "fence" bản cũ. Prod hiện 1 container → mặc định booking-1.
+    instance-id: ${KAFKA_GROUP_INSTANCE_ID:booking-1}
   jwt:
     jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:unbutu-identity}
@@ -33,6 +47,9 @@ booking:
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
+
+outbox:
+  poll-interval: 300ms
 
 management:
   endpoints:

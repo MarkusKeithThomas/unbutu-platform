@@ -135,6 +135,30 @@ class BookingRepository {
                 .param("id", id).update() == 1;
     }
 
+    record ConfirmedRow(UUID id, String code, UUID userId, UUID eventId, String eventTitle, String venue, Instant startsAt,
+                        String buyerName, String buyerEmail, String buyerPhone, long total, String paymentMethod,
+                        Instant confirmedAt) {
+    }
+
+    /** Dữ liệu cho event booking.confirmed: đơn + người mua + sự kiện (bảng event_info sao chép từ catalog). */
+    Optional<ConfirmedRow> confirmedRow(UUID id) {
+        return jdbc.sql("""
+                        select b.id, b.code, b.user_id, b.event_id, e.title, e.venue, e.starts_at,
+                               b.buyer_name, b.buyer_email, b.buyer_phone, b.total, b.payment_method, b.confirmed_at
+                        from bookings b left join event_info e on e.event_id = b.event_id
+                        where b.id = :id and b.status = 'CONFIRMED'""")
+                .param("id", id)
+                .query((rs, i) -> {
+                    var startsAt = rs.getTimestamp("starts_at");
+                    return new ConfirmedRow(rs.getObject("id", UUID.class), rs.getString("code"),
+                            rs.getObject("user_id", UUID.class), rs.getObject("event_id", UUID.class),
+                            rs.getString("title"), rs.getString("venue"), startsAt == null ? null : startsAt.toInstant(),
+                            rs.getString("buyer_name"), rs.getString("buyer_email"), rs.getString("buyer_phone"),
+                            rs.getLong("total"), rs.getString("payment_method"), rs.getTimestamp("confirmed_at").toInstant());
+                })
+                .optional();
+    }
+
     void refundPending(UUID id, String reason) {
         jdbc.sql("""
                         update bookings set status = 'REFUND_PENDING', cancel_reason = :r, updated_at = now()
