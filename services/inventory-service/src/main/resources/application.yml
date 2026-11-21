@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: inventory-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory_db}
+    username: ${DB_USERNAME:inventory}
+    password: ${DB_PASSWORD:inventory}
+  mvc:
+    problemdetails:
+      enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms            # Redis chậm/treo → lỗi nhanh, không giữ thread request
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:redpanda:9092}
+    consumer:
+      group-id: inventory-service
+      auto-offset-reset: earliest   # lần đầu: đọc topic từ đầu để dựng toàn bộ tồn kho
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record              # xử lý xong từng message mới commit offset
+
+inventory:
+  hold:
+    ttl: 10m                        # giữ vé 10′ (booking truyền vào, đây là trần)
+    sweep-interval: 1s              # quét hold hết hạn → trả vé
+  low-stock-ratio: 0.2              # còn < 20% → trạng thái LOW
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

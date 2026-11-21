@@ -114,6 +114,15 @@ export const catalog = {
   deleteTicketType: (t: string, id: string) => request<void>(`/api/catalog/admin/ticket-types/${id}`, json('DELETE'), t),
 };
 
+// ---- inventory: tồn kho realtime (A8b) ----
+export type StockState = 'ON_SALE' | 'LOW' | 'SOLD_OUT' | 'PAUSED';
+export type Availability = { ticketTypeId: string; available: number; total: number; state: StockState };
+
+export const inventory = {
+  // Công khai, cache CDN 1 s – không gửi token.
+  availability: (eventId: string) => request<Availability[]>(`/api/inventory/events/${eventId}/availability`),
+};
+
 /** Bắt đầu login Google: chuyển cả trang sang backend → Google → quay về /auth/callback. */
 export const GOOGLE_LOGIN_URL = '/api/identity/oauth2/authorization/google';
 
