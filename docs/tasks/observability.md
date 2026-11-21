@@ -12,10 +12,10 @@ Nguồn sự thật cho mảng monitoring. Quyết định: ADR-0006 · Vận h�
 
 ### OBS-5 · S1: dashboard RED + SLO + alert (= LT-1) · DOING · Claude + người dùng
 - [x] Dashboard `deploy/signoz/dashboards/service-red.json` (RED, p99 + vạch SLO 300 ms, route, JVM, HikariCP, Kafka lag) – chờ import + soát trên UI.
-- Alert: **đã chốt 2026-11-22 chỉ xem trên UI SigNoz** (bỏ Telegram). Còn: tạo 3 rule theo runbook `signoz.md` §Alert → export JSON vào
+- Alert: **đã chốt 2026-11-22 chỉ xem trên UI SigNoz** (bỏ Telegram). **Hoãn** (người dùng chọn làm load test trước). Còn: tạo 3 rule theo runbook `signoz.md` §Alert → export JSON vào
   `deploy/signoz/alerts/`.
 - SLO: 300 ms không trùng mốc bucket (0,25 / 0,5 s) → p99 nội suy; đủ cho alert. Muốn đo đúng thì thêm mốc 0,3 qua view OTel.
-- Ghi nhận: service đang chạy **Serial GC** (`MarkSweepCompact`, container thấy ít CPU) → xem lại khi load test.
+- Ghi nhận: service đang chạy **Serial GC** (`MarkSweepCompact`) vì `mem_limit 512m` < 1792 MB → xem lại khi load test.
 - **Xong khi:** tắt catalog → alert firing trên SigNoz, bật lại → resolved; đánh dấu `[x]` S1 ở ARCHITECTURE §8 + ADR.
 
 ### OBS-6 · Quyền xem cho `developer` · BLOCKED (làm cùng phân quyền §7) · người dùng + Claude

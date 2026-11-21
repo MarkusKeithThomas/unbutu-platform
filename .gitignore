@@ -25,3 +25,6 @@ dist/
 
 # Env test do tools/ci/compose-smoke.sh sinh tạm (CI)
 deploy/env/
+
+# Báo cáo load test (k6)
+loadtest/reports/
