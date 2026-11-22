@@ -46,7 +46,10 @@ x-service: &service
     interval: 10s
     timeout: 3s
     retries: 12
-    start_period: 30s
+    # Deploy khởi động lại CÙNG LÚC ~9 JVM (+ OTel agent) trên 4 core → khởi động chậm 5–10× bình thường
+    # (2026-11-22: catalog mất > 150 s → deploy fail, rollback cũng fail – docs/postmortems/2026-11-22-deploy-cpu-khoi-dong.md).
+    # Trong start_period lần check fail không bị tính; healthy sớm thì đi tiếp ngay. 180 + 12×10 = 300 s = --wait-timeout của deploy.sh.
+    start_period: 180s
 
 services:
   postgres:
