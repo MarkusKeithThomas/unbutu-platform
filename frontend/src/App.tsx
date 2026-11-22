@@ -5,6 +5,8 @@ import { EventsPage } from './admin/EventsPage';
 import { TicketTypesPage } from './admin/TicketTypesPage';
 import { LoadTestPage } from './admin/LoadTestPage';
 import { DashboardPage } from './admin/DashboardPage';
+import { AdminOrdersPage } from './admin/OrdersPage';
+import { PaymentsPage } from './admin/PaymentsPage';
 import { useAuth } from './auth';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { LoginPage } from './pages/LoginPage';
@@ -70,6 +72,8 @@ export function App() {
       <Route path="/orders/:id" element={<RequireAuth><OrderResultPage /></RequireAuth>} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin/dashboard" element={<RequireAdmin><DashboardPage /></RequireAdmin>} />
+      <Route path="/admin/orders" element={<RequireAdmin><AdminOrdersPage /></RequireAdmin>} />
+      <Route path="/admin/payments" element={<RequireAdmin><PaymentsPage /></RequireAdmin>} />
       <Route path="/admin/events" element={<RequireAdmin><EventsPage /></RequireAdmin>} />
       <Route path="/admin/ticket-types" element={<RequireAdmin><TicketTypesPage /></RequireAdmin>} />
       <Route path="/admin/loadtest" element={<RequireAdmin><LoadTestPage /></RequireAdmin>} />

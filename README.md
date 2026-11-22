@@ -40,6 +40,8 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | POST | `/api/bookings/{id}/checkout` | Sang cổng thanh toán (`{method, buyer}` → `paymentUrl`) |
 | GET | `/api/payments/vnpay/ipn`, `/api/payments/vnpay/return`, `/api/payments/mock/pay` | IPN (server→server) / trình duyệt quay về / trang ngân hàng giả lập |
 | GET | `/api/bookings/admin/stats?from=&to=&eventId=&includeTest=` | Dashboard admin: đơn theo trạng thái, vé đã bán, doanh thu theo ngày/sự kiện (giờ VN, cache 60 s) – **ADMIN** |
+| GET | `/api/bookings/admin/bookings[/{id}]?status=&eventId=&q=&cursor=` | Admin tra cứu đơn (keyset; `q` = mã đơn / email / SĐT / id) + chi tiết kèm thanh toán – **ADMIN** |
+| GET | `/api/bookings/admin/payments[/summary]?status=&stuck=&q=&cursor=` | Admin thanh toán lỗi / treo (booking kiểm quyền → payment `/internal/admin/payments`) – **ADMIN** |
 | GET · PUT · DELETE | `/api/bookings/admin/limit-bypass[/{eventId}]` | Cờ load test: bỏ giới hạn 4 vé cho 1 sự kiện, có hạn – **ADMIN** |
 | GET · POST | `/api/loadtest/config`, `/api/loadtest/runs[/{id}]`, `/api/loadtest/runs/current`, `/api/loadtest/runs/{id}/stop` | Load test – **ADMIN** |
 | POST | `/api/identity/register` · `/login` · `/refresh` · `/logout` | Đăng ký / đăng nhập email+mật khẩu; refresh token trong cookie HttpOnly |
