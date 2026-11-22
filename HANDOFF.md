@@ -13,6 +13,7 @@
 
 ## Song song / sau
 - TIX-2: check-in, email vé, `booking.refunded` → VOID (`docs/tasks/catalog.md`).
+- Admin dashboard (vé đã bán / chờ / lỗi, doanh thu, tra cứu đơn): `docs/tasks/admin.md` ADM-1…6 – **chốt 3 câu hỏi đầu file trước khi code**.
 
 ## Ghi chú
 - k6 REST API trả `Content-Type: text/plain` → loadtest-service đọc String rồi parse. Số liệu trực tiếp không có p99 (chỉ p90/p95).
