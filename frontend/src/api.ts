@@ -154,6 +154,32 @@ export const bookings = {
     request<{ paymentUrl: string }>(`/api/bookings/${id}/checkout`, json('POST', { method, buyer }), t),
 };
 
+// ---- dashboard admin (ADM-1) – booking-service, tiền VND, ngày theo giờ VN ----
+export type AdminStats = {
+  from: string;
+  to: string;
+  eventId: string | null;
+  includeTest: boolean;
+  generatedAt: string;
+  kpi: {
+    totalOrders: number; confirmedOrders: number; openOrders: number; failedOrders: number; refundOrders: number;
+    ticketsSold: number; netRevenue: number; grossRevenue: number; refundAmount: number;
+    conversionRate: number; avgOrderValue: number;
+  };
+  byStatus: Partial<Record<BookingStatus, { orders: number; tickets: number; amount: number }>>;
+  cancelReasons: Record<string, number>;
+  daily: { date: string; orders: number; confirmedOrders: number; ticketsSold: number; netRevenue: number }[];
+  topEvents: { eventId: string; title: string | null; startsAt: string | null; hidden: boolean; confirmedOrders: number; ticketsSold: number; netRevenue: number }[];
+};
+
+export const adminStats = {
+  get: (t: string, q: { from: string; to: string; eventId?: string; includeTest: boolean }) => {
+    const p = new URLSearchParams({ from: q.from, to: q.to, includeTest: String(q.includeTest) });
+    if (q.eventId) p.set('eventId', q.eventId);
+    return request<AdminStats>(`/api/bookings/admin/stats?${p}`, {}, t);
+  },
+};
+
 // ---- vé điện tử (notification-service, ADR-0009) ----
 export type Ticket = {
   id: string;

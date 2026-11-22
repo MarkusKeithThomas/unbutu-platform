@@ -31,7 +31,7 @@ class CatalogEventsListener {
                     book.markDeleted(json.treeToValue(payload, CatalogEvents.TicketTypeDeleted.class).ticketTypeId());
             case CatalogEvents.EVENT_UPSERTED -> {
                 var e = json.treeToValue(payload, CatalogEvents.EventUpserted.class);
-                book.upsertEvent(e.eventId(), e.title(), e.venue(), e.startsAt(), e.updatedAt());
+                book.upsertEvent(e.eventId(), e.title(), e.venue(), e.startsAt(), Boolean.TRUE.equals(e.hidden()), e.updatedAt());
             }
             default -> {
                 // event.deleted: đơn cũ vẫn cần hiển thị tên sự kiện → giữ lại; type lạ → bỏ qua (tương thích tiến).

@@ -51,7 +51,7 @@ public class EventService {
 
     private void publishUpserted(Event e) {
         outbox.append(CatalogEvents.TOPIC, e.getId(), CatalogEvents.EVENT_UPSERTED, new CatalogEvents.EventUpserted(
-                e.getId(), e.getTitle(), e.getType().name(), e.getVenue(), e.getStartsAt(), e.getUpdatedAt()));
+                e.getId(), e.getTitle(), e.getType().name(), e.getVenue(), e.getStartsAt(), e.getUpdatedAt(), e.isHidden()));
     }
 
     public static CatalogException notFound() {

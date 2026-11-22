@@ -37,7 +37,7 @@ class SecurityConfig {
                 .csrf(csrf -> csrf.disable())   // chỉ Bearer token trong header
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/bookings/admin/**").hasRole("ADMIN")   // cờ load test
+                        .requestMatchers("/api/bookings/admin/**").hasRole("ADMIN")   // cờ load test, thống kê (ADM-1)
                         .requestMatchers("/api/bookings/**", "/api/bookings").authenticated()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
                         .anyRequest().denyAll())

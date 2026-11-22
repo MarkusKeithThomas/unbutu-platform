@@ -4,6 +4,7 @@ import { setReturnTo } from './returnTo';
 import { EventsPage } from './admin/EventsPage';
 import { TicketTypesPage } from './admin/TicketTypesPage';
 import { LoadTestPage } from './admin/LoadTestPage';
+import { DashboardPage } from './admin/DashboardPage';
 import { useAuth } from './auth';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { LoginPage } from './pages/LoginPage';
@@ -67,7 +68,8 @@ export function App() {
       <Route path="/checkout/:id" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/orders" element={<RequireAuth><OrdersPage /></RequireAuth>} />
       <Route path="/orders/:id" element={<RequireAuth><OrderResultPage /></RequireAuth>} />
-      <Route path="/admin" element={<Navigate to="/admin/ticket-types" replace />} />
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+      <Route path="/admin/dashboard" element={<RequireAdmin><DashboardPage /></RequireAdmin>} />
       <Route path="/admin/events" element={<RequireAdmin><EventsPage /></RequireAdmin>} />
       <Route path="/admin/ticket-types" element={<RequireAdmin><TicketTypesPage /></RequireAdmin>} />
       <Route path="/admin/loadtest" element={<RequireAdmin><LoadTestPage /></RequireAdmin>} />
