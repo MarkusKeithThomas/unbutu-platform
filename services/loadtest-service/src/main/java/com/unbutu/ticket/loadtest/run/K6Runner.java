@@ -133,7 +133,7 @@ class K6Runner {
         Instant now = clock.instant();
         var summary = new RunDtos.RunSummary(UUID.randomUUID(), req.scenario(), List.copyOf(steps), req.stepSeconds(),
                 req.p95Ms(), req.maxErrPct(), req.stopOnFail(), "RUNNING", startedBy, now, null, null,
-                fixture == null ? null : fixture.eventId());
+                fixture == null ? null : fixture.eventId(), fixture == null ? null : req.qrP95MsOrDefault());
         a.init(summary, props.workDir().resolve("runs").resolve(summary.id().toString()), fixture, adminToken);
         try {
             runs.insert(summary);
@@ -145,6 +145,7 @@ class K6Runner {
             pb.environment().putAll(env(req, a.dir));
             if (fixture != null) {
                 pb.environment().putAll(fixture.env());
+                pb.environment().put("QR_P95_MS", String.valueOf(req.qrP95MsOrDefault()));
             }
             a.process = pb.start();
         } catch (IOException | RuntimeException e) {
@@ -290,13 +291,26 @@ class K6Runner {
         double secs = Math.max(1, Duration.between(a.firstSeen[i], a.lastSeen[i] == null ? a.firstSeen[i] : a.lastSeen[i])
                 .toMillis() / 1000.0);
         boolean running = i == current;
-        // Ước tính trực tiếp (tiêu chí chung); tiêu chí riêng của kịch bản có trong bảng chính thức lúc kết thúc.
-        Boolean pass = running ? null
-                : (p95 != null && p95 < a.summary.p95Ms()) && errPct < a.summary.maxErrPct()
-                        && dropped < Math.max(1, Math.ceil(rps * a.summary.stepSeconds() * DROP_PCT / 100.0))
-                        && (ticketPct == null || ticketPct > 99);
+        // Ước tính trực tiếp, cùng tiêu chí với lib/steps.js (bảng chính thức thay thế lúc kết thúc).
+        List<String> failed = new ArrayList<>();
+        if (p95 != null && p95 >= a.summary.p95Ms()) {
+            failed.add("p95");
+        }
+        if (errPct >= a.summary.maxErrPct() && errPct > 0) {
+            failed.add("errors");
+        }
+        if (dropped >= Math.max(1, Math.ceil(rps * a.summary.stepSeconds() * DROP_PCT / 100.0))) {
+            failed.add("dropped");
+        }
+        if (a.summary.qrP95Ms() != null && ttq != null && ttq >= a.summary.qrP95Ms()) {
+            failed.add("qr_time");
+        }
+        if (ticketPct != null && ticketPct <= 99) {
+            failed.add("tickets");
+        }
+        Boolean pass = i == current ? null : failed.isEmpty();
         return new RunDtos.StepView(rps, running ? "RUNNING" : "DONE", reqs, round1(reqs / secs), p95, p99,
-                round2(errPct), dropped, pass, ttq, ticketPct);
+                round2(errPct), dropped, pass, ttq, ticketPct, List.copyOf(failed));
     }
 
     /** Submetric theo bậc: tên scenario khớp stepName() trong lib/steps.js. */
@@ -399,12 +413,18 @@ class K6Runner {
             out.add(new RunDtos.StepView(s.path("rps").asInt(), "DONE",
                     Math.round(achieved * run.stepSeconds()), round1(achieved), num(s, "p95"), num(s, "p99"),
                     round2(s.path("errPct").asDouble(0)), s.path("dropped").asLong(0), s.path("pass").asBoolean(false),
-                    num(s, "ttqP95"), num(s, "ticketPct")));
+                    num(s, "ttqP95"), num(s, "ticketPct"), strings(s.path("failedChecks"))));
         }
         return out;
     }
 
     // ------------------------------------------------------------------ tiện ích
+
+    private static List<String> strings(JsonNode arr) {
+        List<String> out = new ArrayList<>();
+        arr.forEach(x -> out.add(x.asString()));
+        return List.copyOf(out);
+    }
 
     private static Double num(JsonNode n, String field) {
         JsonNode v = n.path(field);

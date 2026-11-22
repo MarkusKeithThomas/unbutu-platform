@@ -22,7 +22,7 @@ class RunRepository {
 
     private static final String COLS = """
             id, scenario, steps, step_seconds, p95_ms, max_err_pct, stop_on_fail, status, started_by, started_at,
-            finished_at, pass_up_to_rps, event_id""";
+            finished_at, pass_up_to_rps, event_id, qr_p95_ms""";
 
     private final JdbcClient jdbc;
 
@@ -34,7 +34,7 @@ class RunRepository {
                 rs.getDouble("max_err_pct"), rs.getBoolean("stop_on_fail"), rs.getString("status"),
                 rs.getString("started_by"), rs.getTimestamp("started_at").toInstant(),
                 fin == null ? null : fin.toInstant(), pass == null ? null : ((Number) pass).intValue(),
-                rs.getObject("event_id", UUID.class));
+                rs.getObject("event_id", UUID.class), (Integer) rs.getObject("qr_p95_ms"));
     }
 
     static List<Integer> parseSteps(String s) {
@@ -44,13 +44,13 @@ class RunRepository {
     void insert(RunDtos.RunSummary r) {
         jdbc.sql("""
                         insert into runs (id, scenario, steps, step_seconds, p95_ms, max_err_pct, stop_on_fail, status,
-                                          started_by, started_at, event_id)
-                        values (:id, :scenario, :steps, :stepSec, :p95, :err, :stop, :status, :by, :at, :event)""")
+                                          started_by, started_at, event_id, qr_p95_ms)
+                        values (:id, :scenario, :steps, :stepSec, :p95, :err, :stop, :status, :by, :at, :event, :qr)""")
                 .param("id", r.id()).param("scenario", r.scenario())
                 .param("steps", String.join(",", r.steps().stream().map(String::valueOf).toList()))
                 .param("stepSec", r.stepSeconds()).param("p95", r.p95Ms()).param("err", r.maxErrPct())
                 .param("stop", r.stopOnFail()).param("status", r.status()).param("by", r.startedBy())
-                .param("at", Timestamp.from(r.startedAt())).param("event", r.eventId())
+                .param("at", Timestamp.from(r.startedAt())).param("event", r.eventId()).param("qr", r.qrP95Ms())
                 .update();
     }
 
