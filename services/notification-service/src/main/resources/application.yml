@@ -23,6 +23,8 @@ spring:
 notification:
   kafka:
     instance-id: ${KAFKA_GROUP_INSTANCE_ID:notification-1}   # mỗi instance chạy cùng lúc một id khác
+    # Số luồng đọc booking.event.v1 (≤ 6 partition ÷ số instance). Pool DB (Hikari mặc định 10) đủ cho 3 luồng.
+    booking-concurrency: ${KAFKA_BOOKING_CONCURRENCY:3}
   jwt:
     jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:unbutu-identity}

@@ -33,6 +33,8 @@ booking:
     # Phải KHÁC NHAU giữa các instance chạy cùng lúc (scale N bản: booking-1..N, vd. ordinal StatefulSet);
     # 2 instance trùng id → broker "fence" bản cũ. Prod hiện 1 container → mặc định booking-1.
     instance-id: ${KAFKA_GROUP_INSTANCE_ID:booking-1}
+    # Số luồng đọc payment.result.v1 (≤ 6 partition ÷ số instance). Pool DB (Hikari mặc định 10) đủ cho 3 luồng.
+    payment-concurrency: ${KAFKA_PAYMENT_CONCURRENCY:3}
   jwt:
     jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:unbutu-identity}
