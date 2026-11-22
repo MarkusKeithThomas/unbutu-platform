@@ -29,7 +29,10 @@ class TicketIssuer {
 
     // @Transactional ở đây (không ở issue): listener được gọi qua proxy; gọi issue() nội bộ sẽ bỏ qua proxy → mất transaction.
     @Transactional
-    @KafkaListener(topics = BookingEvents.TOPIC, properties = "group.instance.id=${notification.kafka.instance-id}-booking")
+    // concurrency: N luồng chia 6 partition (key = bookingId → mọi event của 1 đơn vẫn tuần tự). 1 luồng ≈ 10 đơn/s trên prod
+    // (load test 2026-11-22: docs/loadtest/2026-11-22-purchase-prod.md). Spring tự thêm "-0..N-1" vào group.instance.id.
+    @KafkaListener(topics = BookingEvents.TOPIC, concurrency = "${notification.kafka.booking-concurrency}",
+            properties = "group.instance.id=${notification.kafka.instance-id}-booking")
     void onMessage(String value) {
         JsonNode envelope = json.readTree(value);
         if (BookingEvents.CONFIRMED.equals(envelope.path("type").asString())) {

@@ -15,7 +15,10 @@ class PaymentResultListener {
     private final JsonMapper json;
     private final SettlementService settlement;
 
-    @KafkaListener(topics = PaymentEvents.TOPIC, properties = "group.instance.id=${booking.kafka.instance-id}-payment")
+    // concurrency: N luồng chia 6 partition (key = bookingId → kết quả của 1 đơn vẫn tuần tự). 1 luồng ≈ 10 đơn/s trên prod
+    // (load test 2026-11-22: docs/loadtest/2026-11-22-purchase-prod.md). Spring tự thêm "-0..N-1" vào group.instance.id.
+    @KafkaListener(topics = PaymentEvents.TOPIC, concurrency = "${booking.kafka.payment-concurrency}",
+            properties = "group.instance.id=${booking.kafka.instance-id}-payment")
     void onMessage(String value) {
         JsonNode envelope = json.readTree(value);
         settlement.onResult(envelope.path("type").asString(),
