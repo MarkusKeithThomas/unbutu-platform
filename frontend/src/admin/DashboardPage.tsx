@@ -1,32 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { adminStats, catalog, errorMessage, type AdminStats, type BookingStatus, type CatalogEvent } from '../api';
+import { adminStats, catalog, errorMessage, type AdminStats, type CatalogEvent } from '../api';
 import { useAuth } from '../auth';
 import { LineChart } from './LineChart';
+import { BOOKING_STATUS as STATUS, BOOKING_STATUS_ORDER as STATUS_ORDER, CANCEL_REASON as REASON, money } from './labels';
 import { AdminLayout, fmtDateTime, fmtNumber, fmtStamp } from './ui';
 
 const SERIES_1 = '#2a78d6';   // dataviz palette – slot 1 (blue)
 const SERIES_2 = '#1baf7a';   // slot 2 (green)
 const REFRESH_MS = 60_000;    // = cache phía server (60 s) – làm mới nhanh hơn cũng không có số mới
-
-const STATUS: Record<BookingStatus, string> = {
-  CONFIRMED: 'Thành công',
-  PENDING: 'Đang giữ vé',
-  AWAITING_PAYMENT: 'Chờ thanh toán',
-  CANCELLED: 'Đã huỷ',
-  EXPIRED: 'Hết hạn',
-  REFUND_PENDING: 'Chờ hoàn tiền',
-  REFUNDED: 'Đã hoàn tiền',
-};
-const STATUS_ORDER: BookingStatus[] = ['CONFIRMED', 'AWAITING_PAYMENT', 'PENDING', 'EXPIRED', 'CANCELLED', 'REFUND_PENDING', 'REFUNDED'];
-
-const REASON: Record<string, string> = {
-  USER: 'Khách tự huỷ',
-  SOLD_OUT: 'Hết vé khi giữ',
-  NOT_ON_SALE: 'Hạng vé ngừng bán',
-  INVENTORY_ERROR: 'Lỗi kho vé',
-  EXPIRED: 'Hết hạn giữ / không thanh toán',
-  CANCELLED: 'Huỷ (không rõ lý do)',
-};
 
 const PRESETS = [
   { key: 'today', label: 'Hôm nay', days: 1 },
@@ -38,7 +19,6 @@ const PRESETS = [
 /** YYYY-MM-DD theo giờ VN (server cũng gom ngày theo Asia/Ho_Chi_Minh). */
 const vnDate = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
 const daysAgo = (n: number) => vnDate(new Date(Date.now() - n * 86_400_000));
-const money = (n: number) => `${fmtNumber(n)} đ`;
 const pct = (r: number) => `${(r * 100).toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
 const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
