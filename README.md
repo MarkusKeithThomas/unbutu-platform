@@ -16,6 +16,7 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | `inventory-service` | Tồn kho + giữ vé: Redis Lua (oversell = 0) + sổ cái Postgres, nghe `catalog.event.v1` |
 | `booking-service` | Giữ vé 10′ (idempotent, 4 vé/tài khoản/sự kiện), huỷ, tự hết hạn; bảng giá từ `catalog.event.v1`; phát `booking.event.v1` (`booking.confirmed`, Outbox) |
 | `payment-service` | Thanh toán giao thức VNPay 2.1.0 – **cổng giả lập** (IPN là nguồn sự thật, Outbox `payment.result.v1`, hoàn tiền) |
+| `loadtest-service` | Nút bấm load test (`/admin/loadtest`, chỉ ADMIN): chạy k6 trong container, số liệu trực tiếp, lịch sử – `docs/runbooks/loadtest.md` |
 | `notification-service` | **Vé điện tử QR** (JWS ES256) khi đơn `CONFIRMED` – nghe `booking.event.v1`; `/api/tickets/**` (ADR-0009). Sau: email |
 | `libs/outbox` | Transactional Outbox dùng chung (catalog, payment) |
 | `libs/platform-starter` | `X-Request-Id` → MDC, access log, `RestClient` truyền `X-Request-Id` (catalog dùng) |
@@ -38,11 +39,12 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | POST · GET · DELETE | `/api/bookings` (+ `Idempotency-Key`), `/api/bookings/{id}`, `/api/bookings/me` | Giữ vé 10′ / xem đơn / huỷ – cần đăng nhập |
 | POST | `/api/bookings/{id}/checkout` | Sang cổng thanh toán (`{method, buyer}` → `paymentUrl`) |
 | GET | `/api/payments/vnpay/ipn`, `/api/payments/vnpay/return`, `/api/payments/mock/pay` | IPN (server→server) / trình duyệt quay về / trang ngân hàng giả lập |
+| GET · POST | `/api/loadtest/config`, `/api/loadtest/runs[/{id}]`, `/api/loadtest/runs/current`, `/api/loadtest/runs/{id}/stop` | Load test – **ADMIN** |
 | POST | `/api/identity/register` · `/login` · `/refresh` · `/logout` | Đăng ký / đăng nhập email+mật khẩu; refresh token trong cookie HttpOnly |
 | GET | `/api/identity/me` | Hồ sơ (cần `Authorization: Bearer`) |
 | GET | `/api/identity/providers` | Cách đăng nhập đang bật (`google: true/false`) |
 | GET | `/api/identity/oauth2/authorization/google` | Bắt đầu login Google (redirect) |
-| GET | `/admin/events`, `/admin/ticket-types` | UI quản trị (chỉ ADMIN) |
+| GET | `/admin/events`, `/admin/ticket-types`, `/admin/loadtest` | UI quản trị (chỉ ADMIN) |
 | GET | `/`, `/events/{id}`, `/checkout/{bookingId}`, `/orders/{bookingId}` | UI khách: sự kiện → chọn vé → bước 2 (giữ vé, người mua, thanh toán) → bước 3 kết quả |
 | GET | `/login`, `/register` | UI (container `frontend`, gateway route mọi path không phải `/api/**`) |
 
@@ -78,6 +80,7 @@ Port cố định trên máy, giống nhau dù chạy trong container hay Intell
 | catalog-service | 8082 | | notification-service | 8086 |
 | inventory-service | 8083 | | postgres | 5432 |
 | frontend (nginx) | 8090 | | kafka-ui | 8091 |
+| loadtest-service | 8087 | | | |
 
 ### Lệnh `make` (gõ `make` để xem danh sách)
 ```bash

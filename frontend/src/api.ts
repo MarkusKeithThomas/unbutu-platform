@@ -213,3 +213,29 @@ export function errorMessage(e: unknown): string {
   }
   return 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
 }
+
+// ---- load test (chỉ ADMIN, loadtest-service) ----
+
+export type LtScenario = { name: string; title: string; description: string; writes: boolean };
+export type LtConfig = { scenarios: LtScenario[]; limits: { maxRps: number; maxDurationSeconds: number } };
+export type LtRunRequest = { scenario: string; steps: number[]; stepSeconds: number; p95Ms: number; maxErrPct: number; stopOnFail: boolean };
+export type LtStatus = 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'ERROR' | 'ABORTED';
+export type LtRun = LtRunRequest & {
+  id: string; status: LtStatus; startedBy: string; startedAt: string; finishedAt: string | null; passUpToRps: number | null;
+};
+export type LtStep = {
+  rps: number; state: 'PENDING' | 'RUNNING' | 'DONE' | 'SKIPPED'; reqs: number; achievedRps: number | null;
+  p95: number | null; p99: number | null; errPct: number | null; dropped: number; pass: boolean | null;
+};
+/** 1 điểm / 2 s. p95/p99/errPct: dồn từ đầu bậc đang chạy. */
+export type LtSample = { t: number; rps: number; vus: number; stepRps: number; p95: number | null; p99: number | null; errPct: number };
+export type LtDetail = { run: LtRun; stepViews: LtStep[]; samples: LtSample[]; logTail: string | null };
+
+export const loadtest = {
+  config: (t: string) => request<LtConfig>('/api/loadtest/config', {}, t),
+  runs: (t: string) => request<LtRun[]>('/api/loadtest/runs', {}, t),
+  current: (t: string) => request<LtDetail | undefined>('/api/loadtest/runs/current', {}, t),
+  run: (t: string, id: string) => request<LtDetail>(`/api/loadtest/runs/${id}`, {}, t),
+  start: (t: string, r: LtRunRequest) => request<LtRun>('/api/loadtest/runs', json('POST', r), t),
+  stop: (t: string, id: string) => request<void>(`/api/loadtest/runs/${id}/stop`, json('POST'), t),
+};

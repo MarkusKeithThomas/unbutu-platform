@@ -11,4 +11,5 @@ include(
     "services:booking-service",
     "services:payment-service",
     "services:notification-service",
+    "services:loadtest-service",
 )

@@ -14,7 +14,11 @@ Nút bấm trên web (`loadtest-service`) để sau, dùng lại kịch bản k6
   Lần chạy thử 5/10 rps: p99 bậc 10 rps = 847 ms (JIT còn nguội?) – xem lại khi chạy thật.
 - [ ] **LT-B · Kịch bản `hold` / `checkout`**: tài khoản test (giới hạn 4 vé/tài khoản/sự kiện → nhiều tài khoản hoặc ngoại lệ),
   sự kiện "Load Test" reset được, dọn dữ liệu sau mỗi lượt, cổng thanh toán giả lập chỉ cho ADMIN/test (thay PAY-1c (3)).
-- [ ] **LT-C · Nút bấm trên web** (khi cần): `loadtest-service` (chạy k6, 1 lượt/lúc, trần tải, lưu lịch sử) + trang `/loadtest`.
+- [ ] **LT-C · Nút bấm trên web – rollout prod**: code xong (PR feat/loadtest-ui-service): `loadtest-service` + trang `/admin/loadtest`
+  (chạy/dừng, biểu đồ rps + p95 trực tiếp, bảng PASS/FAIL, "Chịu được X rps", lịch sử). Trước khi Approve deploy: secret
+  `unbutu/prod/loadtest-service#DB_PASSWORD` + PR pro-ticket-workload (env.yaml + `SERVICE_DATABASES`) + tạo `loadtest_db` (runbook add-service-database).
+- [ ] **LT-E · k6 → SigNoz + dashboard "Load test"** (sau LT-C): k6 `--out opentelemetry` vào collector, 1 dashboard ghép rps/p95 của k6
+  với CPU container + p99 từng service để thấy nghẽn ở đâu cùng một trục thời gian.
 - [ ] **LT-D · Alert rule trên UI SigNoz** (OBS-5, hoãn): 3 rule theo runbook `signoz.md` §Alert + diễn tập.
 
 ## Đã xong

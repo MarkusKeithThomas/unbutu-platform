@@ -16,5 +16,7 @@ services:
     url: http://localhost:8085
   notification:
     url: http://localhost:8086
+  loadtest:
+    url: http://localhost:8087
   frontend:
     url: http://localhost:8090

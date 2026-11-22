@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-rou
 import { setReturnTo } from './returnTo';
 import { EventsPage } from './admin/EventsPage';
 import { TicketTypesPage } from './admin/TicketTypesPage';
+import { LoadTestPage } from './admin/LoadTestPage';
 import { useAuth } from './auth';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { LoginPage } from './pages/LoginPage';
@@ -69,6 +70,7 @@ export function App() {
       <Route path="/admin" element={<Navigate to="/admin/ticket-types" replace />} />
       <Route path="/admin/events" element={<RequireAdmin><EventsPage /></RequireAdmin>} />
       <Route path="/admin/ticket-types" element={<RequireAdmin><TicketTypesPage /></RequireAdmin>} />
+      <Route path="/admin/loadtest" element={<RequireAdmin><LoadTestPage /></RequireAdmin>} />
       <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
       <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />

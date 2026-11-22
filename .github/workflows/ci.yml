@@ -69,7 +69,8 @@ jobs:
             svc=$(basename "$dir")
             [ -f "$dir/build.gradle.kts" ] || continue   # bỏ qua service chưa có code
             echo "::group::docker build $svc"
-            docker build -f deploy/docker/service.Dockerfile --build-arg SERVICE="$svc" -t "$svc:ci" .
+            target=$(cat "$dir/docker-target" 2>/dev/null || echo runtime)   # loadtest-service: runtime-k6
+            docker build -f deploy/docker/service.Dockerfile --target "$target" --build-arg SERVICE="$svc" -t "$svc:ci" .
             echo "::endgroup::"
           done
 

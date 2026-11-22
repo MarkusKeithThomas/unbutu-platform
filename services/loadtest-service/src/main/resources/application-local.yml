@@ -1,0 +1,17 @@
+# Profile "local": chạy trong IntelliJ (SPRING_PROFILES_ACTIVE=local). Bảng port: README.md.
+# Cần k6 trên máy (K6_BINARY) – thường chạy service này trong container (make up) thay vì IntelliJ.
+server:
+  port: 8087
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/loadtest_db
+    username: loadtest
+    password: loadtest
+
+loadtest:
+  jwt:
+    jwk-set-uri: http://localhost:8081/.well-known/jwks.json
+  k6-binary: ${K6_BINARY:k6}
+  target-base-url: http://localhost:8080
+  max-rps: 300                     # máy dev

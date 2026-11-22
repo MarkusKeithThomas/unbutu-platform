@@ -1,6 +1,12 @@
 # Dockerfile DÙNG CHUNG cho mọi Spring Boot service. Build từ thư mục gốc repo, sau khi đã `./gradlew build`:
 #   docker build -f deploy/docker/service.Dockerfile --build-arg SERVICE=catalog-service -t catalog-service .
 # Image không tự compile code: CI và máy dev build jar bằng Gradle trước, Docker chỉ đóng gói.
+#
+# Target: `runtime` (mặc định, mọi service). Service có file services/<svc>/docker-target dùng target ghi trong đó
+# (vd. loadtest-service → `runtime-k6`: thêm binary k6). CI/release/compose.local đọc file này.
+
+# k6 (binary Go tĩnh) cho loadtest-service – ghim digest. BuildKit bỏ qua stage này khi build target `runtime`.
+FROM grafana/k6:1.8.2@sha256:00fdcebafbc86cb0137d429529b1caa401a02e09025f02fc74866fa6e2b004d8 AS k6
 
 # ---- Stage 1: tách jar thành các layer (thư viện ít đổi / code đổi thường xuyên) ----
 FROM eclipse-temurin:21-jre AS extract
@@ -10,7 +16,7 @@ COPY services/${SERVICE}/build/libs/${SERVICE}.jar app.jar
 RUN java -Djarmode=tools -jar app.jar extract --layers --launcher --destination extracted
 
 # ---- Stage 2: image chạy thật ----
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre AS runtime
 ARG SERVICE
 LABEL org.opencontainers.image.source="https://github.com/MarkusKeithThomas/unbutu-platform" \
       org.opencontainers.image.title="${SERVICE}"
@@ -41,3 +47,10 @@ ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 
 EXPOSE 8080
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
+
+# ---- Biến thể: + k6 (loadtest-service chạy k6 như tiến trình con – không cần docker.sock) ----
+FROM runtime AS runtime-k6
+COPY --from=k6 /usr/bin/k6 /usr/local/bin/k6
+
+# ---- Mặc định (docker build không --target) ----
+FROM runtime

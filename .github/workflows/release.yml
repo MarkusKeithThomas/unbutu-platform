@@ -58,7 +58,8 @@ jobs:
             [ -f "$dir/build.gradle.kts" ] || continue
             image="ghcr.io/$owner/$svc"
             echo "::group::$svc"
-            docker build -f deploy/docker/service.Dockerfile --build-arg SERVICE="$svc" -t "$image:$SHA" .
+            target=$(cat "$dir/docker-target" 2>/dev/null || echo runtime)   # loadtest-service: runtime-k6
+            docker build -f deploy/docker/service.Dockerfile --target "$target" --build-arg SERVICE="$svc" -t "$image:$SHA" .
             docker push "$image:$SHA"
             digest_ref=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$SHA")   # ghcr.io/...@sha256:...
             echo "::endgroup::"
