@@ -1,5 +1,6 @@
 package com.unbutu.ticket.catalog.event;
 
+import com.unbutu.ticket.catalog.cache.CatalogCache;
 import com.unbutu.ticket.outbox.Outbox;
 import com.unbutu.ticket.catalog.tickettype.TicketTypeRepository;
 import com.unbutu.ticket.events.catalog.CatalogEvents;
@@ -17,6 +18,7 @@ public class EventService {
     private final EventRepository events;
     private final TicketTypeRepository ticketTypes;
     private final Outbox outbox;
+    private final CatalogCache cache;
     private final Clock clock;
 
     public Event get(UUID id) {
@@ -46,10 +48,12 @@ public class EventService {
             throw CatalogException.conflict("EVENT_HAS_TICKET_TYPES", "Sự kiện còn hạng vé, hãy xoá hạng vé trước");
         }
         events.delete(event);
+        cache.invalidateAllAfterCommit();   // admin ghi → xoá cache API công khai sau commit
         outbox.append(CatalogEvents.TOPIC, id, CatalogEvents.EVENT_DELETED, new CatalogEvents.EventDeleted(id));
     }
 
     private void publishUpserted(Event e) {
+        cache.invalidateAllAfterCommit();   // admin ghi → xoá cache API công khai sau commit
         outbox.append(CatalogEvents.TOPIC, e.getId(), CatalogEvents.EVENT_UPSERTED, new CatalogEvents.EventUpserted(
                 e.getId(), e.getTitle(), e.getType().name(), e.getVenue(), e.getStartsAt(), e.getUpdatedAt(), e.isHidden()));
     }

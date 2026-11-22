@@ -12,6 +12,8 @@ dependencies {
     implementation(libs.spring.boot.starter.security)
     implementation(libs.spring.boot.starter.security.oauth2.resource.server)   // verify access token (JWKS của identity)
     implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.data.redis)   // cache response tầng 2 (dùng chung giữa các instance)
+    implementation(libs.caffeine)                         // cache response tầng 1 (trong bộ nhớ)
     implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)

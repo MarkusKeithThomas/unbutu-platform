@@ -3,6 +3,7 @@ package com.unbutu.ticket.catalog.tickettype;
 import com.unbutu.ticket.catalog.event.Event;
 import com.unbutu.ticket.catalog.event.EventRepository;
 import com.unbutu.ticket.catalog.event.EventService;
+import com.unbutu.ticket.catalog.cache.CatalogCache;
 import com.unbutu.ticket.outbox.Outbox;
 import com.unbutu.ticket.catalog.web.CatalogException;
 import com.unbutu.ticket.events.catalog.CatalogEvents;
@@ -20,6 +21,7 @@ public class TicketTypeService {
     private final TicketTypeRepository ticketTypes;
     private final EventRepository events;
     private final Outbox outbox;
+    private final CatalogCache cache;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -62,6 +64,7 @@ public class TicketTypeService {
         t.apply(event, req, clock.instant());
         if (!oldEventId.equals(event.getId())) {
             // Bản nháp đổi sự kiện: báo sự kiện cũ là hạng vé đã rời đi (key khác → partition khác).
+            cache.invalidateAllAfterCommit();   // admin ghi → xoá cache API công khai sau commit
             outbox.append(CatalogEvents.TOPIC, oldEventId, CatalogEvents.TICKET_TYPE_DELETED,
                     new CatalogEvents.TicketTypeDeleted(t.getId(), oldEventId));
         }
@@ -77,11 +80,13 @@ public class TicketTypeService {
             throw CatalogException.conflict("TICKET_TYPE_ALREADY_PUBLISHED", "Hạng vé đã mở bán, chỉ có thể tạm dừng");
         }
         ticketTypes.delete(t);
+        cache.invalidateAllAfterCommit();   // admin ghi → xoá cache API công khai sau commit
         outbox.append(CatalogEvents.TOPIC, t.getEvent().getId(), CatalogEvents.TICKET_TYPE_DELETED,
                 new CatalogEvents.TicketTypeDeleted(t.getId(), t.getEvent().getId()));
     }
 
     private void publishUpserted(TicketType t) {
+        cache.invalidateAllAfterCommit();   // admin ghi → xoá cache API công khai sau commit
         outbox.append(CatalogEvents.TOPIC, t.getEvent().getId(), CatalogEvents.TICKET_TYPE_UPSERTED,
                 new CatalogEvents.TicketTypeUpserted(t.getId(), t.getEvent().getId(), t.getName(), t.getPrice(),
                         t.getTotalQuantity(), t.getStatus().name(), t.getUpdatedAt()));

@@ -9,6 +9,9 @@ spring:
     url: jdbc:postgresql://localhost:5432/catalog_db
     username: catalog
     password: catalog
+  data:
+    redis:
+      host: localhost                    # Redis trong container (127.0.0.1:6379)
   kafka:
     bootstrap-servers: localhost:19092   # Redpanda trong container (listener EXTERNAL)
   flyway:
