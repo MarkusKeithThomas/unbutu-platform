@@ -9,15 +9,16 @@ Dữ liệu đang có (mỗi service 1 DB, không JOIN chéo):
 - `payment_db.payments`: `status` (PENDING · SUCCEEDED · FAILED · REFUNDED), `amount`, `gateway_status` (mã VNPay).
 - `notification_db.tickets`: `status` (VALID · USED · VOID).
 
-## Cần chốt trước khi code (hỏi người dùng)
-1. **Nguồn số liệu bản 1**: (A, đề xuất) API admin đọc thẳng DB từng service (booking + payment), UI ghép lại –
-   nhanh, đủ cho quy mô hiện tại; hay (B) `reporting-service` nghe `booking.event.v1` dựng bảng tổng hợp riêng (CQRS) –
-   đúng hướng 50k rps hơn nhưng cần thêm event cho mọi trạng thái (hiện outbox mới có `booking.confirmed`).
-2. **Doanh thu tính gì**: tổng `total` của đơn CONFIRMED (gộp) hay trừ hoàn tiền (thuần)? Theo ngày giờ VN (UTC+7)?
-3. **Sự kiện ẩn / load test**: mặc định loại khỏi số liệu (có công tắc "Gồm dữ liệu load test")?
+## Đã chốt (2026-11-22)
+1. **Nguồn số liệu – phương án A**: mỗi service mở API admin đọc DB của nó, UI ghép. Cache 60 s trong bộ nhớ, index
+   `(created_at)` / `(event_id, created_at)`, keyset cho danh sách. Khi bảng lên hàng chục triệu dòng → bảng tổng hợp theo giờ
+   hoặc `reporting-service` (CQRS) – giữ nguyên API.
+2. **Doanh thu**: *thuần* = đơn CONFIRMED (KPI chính); *đã nhận* = CONFIRMED + REFUND_PENDING + REFUNDED; hoàn tiền hiện riêng.
+   Gom theo **ngày tạo đơn, giờ VN** (`Asia/Ho_Chi_Minh`).
+3. **Load test**: mặc định loại sự kiện ẩn (`event_info.hidden`, chép từ `catalog.event.v1`); công tắc "Gồm dữ liệu load test".
 
 ## Đang mở
-- [ ] **ADM-1 · API thống kê** (booking-service, role ADMIN): `GET /api/bookings/admin/stats?from=&to=&eventId=` →
+- [x] **ADM-1 · API thống kê** (2026-11-22, `admin/AdminStatsService`; tỷ lệ chốt đơn = CONFIRMED / đơn đã có kết quả, bỏ đơn đang chờ) (booking-service, role ADMIN): `GET /api/bookings/admin/stats?from=&to=&eventId=` →
   số đơn theo trạng thái, số vé đã bán, doanh thu, tỷ lệ chuyển đổi (CONFIRMED / tổng đơn), doanh thu theo ngày + theo sự kiện.
   50k rps: không `COUNT(*)` toàn bảng mỗi lần tải – cache 30–60 s (Caffeine/Redis) hoặc bảng tổng hợp theo giờ cập nhật định kỳ;
   index `(status, created_at)`, `(event_id, status)`.
@@ -25,7 +26,7 @@ Dữ liệu đang có (mỗi service 1 DB, không JOIN chéo):
   phân trang keyset (`created_at, id`), không OFFSET; chi tiết đơn: dòng vé, lịch sử trạng thái, thanh toán, vé QR đã phát.
 - [ ] **ADM-3 · Thanh toán lỗi / treo** (payment-service): `GET /api/payments/admin/payments?status=FAILED|PENDING` + mã lỗi
   `gateway_status`; đánh dấu PENDING quá hạn (IPN không về) để đối soát; số lần hoàn tiền + REFUND_PENDING bị kẹt.
-- [ ] **ADM-4 · Trang `/admin/dashboard`** (frontend, `RequireAdmin`, đặt làm trang mặc định của `/admin`):
+- [ ] **ADM-4 · Trang `/admin/dashboard`** – *phần 1 xong 2026-11-22*: KPI, 2 biểu đồ, đơn theo trạng thái, lý do huỷ, top sự kiện, lọc ngày/sự kiện/load test. *Còn*: tab Đơn hàng + Thanh toán lỗi (chờ ADM-2/3) (frontend, `RequireAdmin`, đặt làm trang mặc định của `/admin`):
   - Hàng KPI: doanh thu hôm nay / 7 ngày, vé đã bán, đơn đang chờ (PENDING + AWAITING_PAYMENT), đơn lỗi/hết hạn, tỷ lệ chuyển đổi.
   - Biểu đồ doanh thu + số vé theo ngày (dùng lại `admin/LineChart.tsx`); bảng top sự kiện (đã bán / tổng – nối CAT-2).
   - Tab "Đơn hàng" (ADM-2) và "Thanh toán lỗi" (ADM-3) có lọc trạng thái, tìm theo email/mã đơn, bấm xem chi tiết.

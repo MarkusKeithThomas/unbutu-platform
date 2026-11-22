@@ -25,6 +25,7 @@ export function AdminLayout({ section, title, action, children }: { section: str
           </div>
         </div>
         <ul>
+          <li><NavLink to="/admin/dashboard">Tổng quan</NavLink></li>
           <li><NavLink to="/admin/events">Sự kiện</NavLink></li>
           <li><NavLink to="/admin/ticket-types">Hạng vé</NavLink></li>
           <li><NavLink to="/admin/loadtest">Load test</NavLink></li>

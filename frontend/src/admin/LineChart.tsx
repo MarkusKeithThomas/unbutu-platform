@@ -5,11 +5,13 @@ export type Series = { name: string; values: (number | null)[]; color?: string; 
 
 type Props = {
   title: string;
-  x: number[];                      // giây kể từ lúc bắt đầu
+  x: number[];                      // giây kể từ lúc bắt đầu (hoặc chỉ số ngày khi có xFormat)
   series: Series[];
   threshold?: { value: number; label: string };
   height?: number;
   empty?: string;
+  /** Nhãn trục X/tooltip; có thì x là chỉ số rời rạc (0..n-1, vd. ngày) – mặc định mm:ss. */
+  xFormat?: (v: number) => string;
 };
 
 const PAD = { top: 12, right: 16, bottom: 28, left: 52 };
@@ -27,7 +29,7 @@ const fmt = (v: number) => (v >= 100 ? Math.round(v).toLocaleString('vi-VN') : v
 const fmtT = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
 /** Biểu đồ đường SVG thuần (không thư viện): 1 trục Y, crosshair + tooltip liệt kê mọi series tại điểm gần nhất. */
-export function LineChart({ title, x, series, threshold, height = 220, empty = 'Chưa có số liệu' }: Props) {
+export function LineChart({ title, x, series, threshold, height = 220, empty = 'Chưa có số liệu', xFormat }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [hover, setHover] = useState<number | null>(null);
@@ -44,7 +46,8 @@ export function LineChart({ title, x, series, threshold, height = 220, empty = '
   const all = series.flatMap((s) => s.values).filter((v): v is number => v != null);
   if (threshold) all.push(threshold.value);
   const { max, step } = niceMax(Math.max(0, ...all) * 1.05);
-  const xMax = Math.max(10, x.length ? x[x.length - 1] : 10);
+  const xMax = xFormat ? Math.max(1, x.length ? x[x.length - 1] : 1) : Math.max(10, x.length ? x[x.length - 1] : 10);
+  const fx = xFormat ?? fmtT;
   const w = width - PAD.left - PAD.right;
   const h = height - PAD.top - PAD.bottom;
   const sx = (t: number) => PAD.left + (t / xMax) * w;
@@ -73,6 +76,9 @@ export function LineChart({ title, x, series, threshold, height = 220, empty = '
   const ticks: number[] = [];
   for (let v = 0; v <= max + 1e-9; v += step) ticks.push(v);
   const xTicks = 5;
+  const xTickValues = xFormat
+    ? [...new Set(Array.from({ length: xTicks + 1 }, (_, i) => Math.round((i * xMax) / xTicks)))]
+    : Array.from({ length: xTicks + 1 }, (_, i) => (i * xMax) / xTicks);
 
   return (
     <figure className="lt-chart">
@@ -97,8 +103,8 @@ export function LineChart({ title, x, series, threshold, height = 220, empty = '
                 <text x={PAD.left - 8} y={sy(v)} className="ytick">{fmt(v)}</text>
               </g>
             ))}
-            {Array.from({ length: xTicks + 1 }, (_, i) => (i * xMax) / xTicks).map((t) => (
-              <text key={t} x={sx(t)} y={height - 8} className="xtick">{fmtT(t)}</text>
+            {xTickValues.map((t) => (
+              <text key={t} x={sx(t)} y={height - 8} className="xtick">{fx(t)}</text>
             ))}
             {threshold && (
               <g>
@@ -123,7 +129,7 @@ export function LineChart({ title, x, series, threshold, height = 220, empty = '
         )}
         {hover != null && x.length > 0 && (
           <div className="lt-tip" style={{ left: Math.min(sx(x[hover]) + 12, width - 170), top: PAD.top }}>
-            <small>{fmtT(x[hover])}</small>
+            <small>{fx(x[hover])}</small>
             {series.map((s) => (
               <div key={s.name}>
                 <i className={s.muted ? 'muted' : ''} style={s.muted ? undefined : { background: s.color }} />

@@ -20,7 +20,9 @@ public final class CatalogEvents {
     }
 
     /** Trạng thái đầy đủ của sự kiện sau khi tạo/sửa (snapshot, không phải diff → consumer chỉ cần giữ bản mới nhất). */
-    public record EventUpserted(UUID eventId, String title, String type, String venue, Instant startsAt, Instant updatedAt) {
+    /** {@code hidden}: sự kiện ẩn khỏi khách (vd. load test) – null ở message cũ (trước ADM-1) = false. */
+    public record EventUpserted(UUID eventId, String title, String type, String venue, Instant startsAt, Instant updatedAt,
+                                Boolean hidden) {
     }
 
     public record EventDeleted(UUID eventId) {

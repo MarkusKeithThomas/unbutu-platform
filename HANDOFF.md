@@ -13,7 +13,8 @@
 
 ## Song song / sau
 - TIX-2: check-in, email vé, `booking.refunded` → VOID (`docs/tasks/catalog.md`).
-- Admin dashboard (vé đã bán / chờ / lỗi, doanh thu, tra cứu đơn): `docs/tasks/admin.md` ADM-1…6 – **chốt 3 câu hỏi đầu file trước khi code**.
+- **Admin dashboard** (`docs/tasks/admin.md`): ADM-1 + ADM-4 phần 1 ở nhánh `feat/admin-dashboard` → sau deploy kiểm
+  `https://unbutu.tail3c11f4.ts.net/admin/dashboard` (migration booking V5: `event_info.hidden` + 2 index). Tiếp: ADM-2 danh sách đơn, ADM-3 thanh toán lỗi.
 
 ## Ghi chú
 - k6 REST API trả `Content-Type: text/plain` → loadtest-service đọc String rồi parse. Số liệu trực tiếp không có p99 (chỉ p90/p95).

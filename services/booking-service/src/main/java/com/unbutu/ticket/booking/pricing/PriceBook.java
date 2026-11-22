@@ -40,16 +40,17 @@ public class PriceBook {
         jdbc.sql("update ticket_type_prices set deleted = true where ticket_type_id = :tt").param("tt", ticketTypeId).update();
     }
 
-    void upsertEvent(UUID eventId, String title, String venue, Instant startsAt, Instant version) {
+    void upsertEvent(UUID eventId, String title, String venue, Instant startsAt, boolean hidden, Instant version) {
         jdbc.sql("""
-                        insert into event_info (event_id, title, venue, starts_at, catalog_updated_at)
-                        values (:id, :title, :venue, :starts, :ver)
+                        insert into event_info (event_id, title, venue, starts_at, hidden, catalog_updated_at)
+                        values (:id, :title, :venue, :starts, :hidden, :ver)
                         on conflict (event_id) do update
                            set title = excluded.title, venue = excluded.venue, starts_at = excluded.starts_at,
-                               catalog_updated_at = excluded.catalog_updated_at
+                               hidden = excluded.hidden, catalog_updated_at = excluded.catalog_updated_at
                          where event_info.catalog_updated_at < excluded.catalog_updated_at""")
                 .param("id", eventId).param("title", title).param("venue", venue)
-                .param("starts", startsAt == null ? null : Timestamp.from(startsAt)).param("ver", Timestamp.from(version))
+                .param("starts", startsAt == null ? null : Timestamp.from(startsAt)).param("hidden", hidden)
+                .param("ver", Timestamp.from(version))
                 .update();
     }
 

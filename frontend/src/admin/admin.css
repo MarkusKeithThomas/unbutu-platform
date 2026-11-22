@@ -164,3 +164,18 @@ fieldset.a-fieldset legend { font-size: 13px; font-weight: 600; margin-bottom: 8
 .a-switch { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: #374151; cursor: pointer; }
 .a-switch input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
 .lt-warn { color: #92400E; background: #FEF3C7; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+
+/* ---- Tổng quan (/admin/dashboard, ADM-4) ---- */
+.db-gap { margin-top: 16px; }
+.db-filters { align-items: flex-end; }
+.db-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: #374151; flex: 0 1 170px; min-width: 0; }
+.db-field.db-event { flex: 1 1 220px; }
+.db-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+.db-grid > section { margin-top: 0; }
+.a-table.db-table { min-width: 0; }
+.a-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.db-st { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--line); color: #374151; }
+.db-st.CONFIRMED { background: #DCFCE7; color: #166534; }
+.db-st.PENDING, .db-st.AWAITING_PAYMENT { background: #DBEAFE; color: #1E40AF; }
+.db-st.CANCELLED, .db-st.EXPIRED { background: #FEE2E2; color: #991B1B; }
+.db-st.REFUND_PENDING, .db-st.REFUNDED { background: #FFEDD5; color: #9A3412; }
