@@ -26,6 +26,8 @@ export function AdminLayout({ section, title, action, children }: { section: str
         </div>
         <ul>
           <li><NavLink to="/admin/dashboard">Tổng quan</NavLink></li>
+          <li><NavLink to="/admin/orders">Đơn hàng</NavLink></li>
+          <li><NavLink to="/admin/payments">Thanh toán</NavLink></li>
           <li><NavLink to="/admin/events">Sự kiện</NavLink></li>
           <li><NavLink to="/admin/ticket-types">Hạng vé</NavLink></li>
           <li><NavLink to="/admin/loadtest">Load test</NavLink></li>
@@ -113,6 +115,24 @@ export function Drawer(props: { title: string; saveLabel: string; busy: boolean;
           <button type="button" className="a-btn" onClick={props.onClose}>Huỷ</button>
           <button type="submit" form="dr-form" className="a-btn primary" disabled={props.busy}>{props.busy ? 'Đang lưu…' : props.saveLabel}</button>
         </footer>
+      </section>
+    </div>
+  );
+}
+
+/** Bảng chi tiết chỉ xem (không có nút lưu) – trượt từ phải, Esc / bấm nền để đóng. */
+export function SidePanel(props: { title: string; onClose: () => void; children: ReactNode }) {
+  useEscape(props.onClose);
+  return (
+    <div className="a-overlay" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
+      <section role="dialog" aria-modal="true" aria-labelledby="sp-title" className="a-drawer wide">
+        <header>
+          <h2 id="sp-title">{props.title}</h2>
+          <button type="button" className="a-close" onClick={props.onClose} aria-label="Đóng">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </header>
+        <div className="a-drawer-body">{props.children}</div>
       </section>
     </div>
   );

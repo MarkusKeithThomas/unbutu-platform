@@ -62,6 +62,30 @@ public class PaymentClient {
         }
     }
 
+    /**
+     * Admin (ADM-3): GET /internal/admin/** của payment, trả nguyên JSON. 400 của payment → 400 cho UI;
+     * lỗi khác / timeout → 503 PAYMENT_UNAVAILABLE.
+     */
+    public JsonNode adminGet(String path, Map<String, String> query) {
+        try {
+            return http.get().uri(b -> {
+                b.path(path);
+                query.forEach(b::queryParam);
+                return b.build();
+            }).exchange((req, res) -> {
+                if (res.getStatusCode().is2xxSuccessful()) {
+                    return res.bodyTo(JsonNode.class);
+                }
+                if (res.getStatusCode().value() == 400) {
+                    throw new BookingException(HttpStatus.BAD_REQUEST, "INVALID_QUERY", "Tham số tra cứu không hợp lệ");
+                }
+                throw unavailable(null);
+            });
+        } catch (RestClientException e) {
+            throw unavailable(e);
+        }
+    }
+
     private static BookingException unavailable(Throwable cause) {
         var e = new BookingException(HttpStatus.SERVICE_UNAVAILABLE, "PAYMENT_UNAVAILABLE", "Cổng thanh toán đang bận, vui lòng thử lại");
         if (cause != null) {

@@ -180,6 +180,50 @@ export const adminStats = {
   },
 };
 
+// ---- tra cứu đơn + thanh toán cho admin (ADM-2, ADM-3) – keyset: nextCursor null = hết ----
+export type CursorPage<T> = { items: T[]; nextCursor: string | null };
+export type AdminBooking = {
+  id: string; code: string; status: BookingStatus; cancelReason: string | null; userId: string;
+  event: { id: string; title: string | null; startsAt: string | null; hidden: boolean };
+  buyer: { name: string | null; email: string | null; phone: string | null };
+  ticketCount: number; subtotal: number; fee: number; total: number; paymentMethod: string | null;
+  createdAt: string; expiresAt: string; confirmedAt: string | null; updatedAt: string;
+};
+export type PaymentStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'REFUNDED';
+export type AdminPayment = {
+  id: string; bookingId: string; bookingCode: string; attempt: number; txnRef: string; amount: number; method: string;
+  status: PaymentStatus; stuck: boolean; providerTxnNo: string | null; providerResponseCode: string | null;
+  expireAt: string; paidAt: string | null; refundedAt: string | null; createdAt: string; updatedAt: string;
+  lastCheck: { gatewayCode: string | null; gatewayStatus: string | null; action: string; note: string | null; checkedAt: string } | null;
+};
+export type AdminBookingDetail = {
+  booking: AdminBooking;
+  lines: { ticketTypeId: string; name: string; unitPrice: number; quantity: number; amount: number }[];
+  payments: AdminPayment[] | null;
+  paymentsUnavailable: boolean;
+};
+export type PaymentSummary = {
+  from: string; to: string; generatedAt: string; stuck: number;
+  countByStatus: Partial<Record<PaymentStatus, number>>; amountByStatus: Partial<Record<PaymentStatus, number>>;
+  failureCodes: Record<string, number>;
+};
+
+const qs = (q: Record<string, string | number | boolean | undefined | null>) => {
+  const p = new URLSearchParams();
+  Object.entries(q).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
+  return p.toString();
+};
+
+export const adminOrders = {
+  list: (t: string, q: { status?: string; eventId?: string; q?: string; includeTest?: boolean; cursor?: string | null; size?: number }) =>
+    request<CursorPage<AdminBooking>>(`/api/bookings/admin/bookings?${qs(q)}`, {}, t),
+  detail: (t: string, id: string) => request<AdminBookingDetail>(`/api/bookings/admin/bookings/${id}`, {}, t),
+  payments: (t: string, q: { status?: string; stuck?: boolean; q?: string; cursor?: string | null; size?: number }) =>
+    request<CursorPage<AdminPayment>>(`/api/bookings/admin/payments?${qs(q)}`, {}, t),
+  paymentSummary: (t: string, from: string, to: string) =>
+    request<PaymentSummary>(`/api/bookings/admin/payments/summary?${qs({ from, to })}`, {}, t),
+};
+
 // ---- vé điện tử (notification-service, ADR-0009) ----
 export type Ticket = {
   id: string;
