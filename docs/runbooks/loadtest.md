@@ -49,7 +49,7 @@ Tham số khác: `P95_MS=500`, `MAX_ERR_PCT=0.5`, `STOP_ON_FAIL=false` (chạy h
 | Tên | Làm gì | Ghi chú |
 |---|---|---|
 | `browse` | 40% danh sách sự kiện · 20% chi tiết · 20% hạng vé · 20% "Còn x/y" (inventory, Redis) | Chỉ đọc – an toàn cho prod. Cần ≥ 1 sự kiện đang bán |
-| `purchase` | **Mua vé end-to-end**: giữ vé → checkout → ngân hàng giả lập "thành công" → IPN → Kafka → CONFIRMED → hỏi `/api/tickets/bookings/{id}` tới khi có QR. 1 lượt = 1 vé ≈ 6 request | **Ghi dữ liệu** – chỉ qua nút bấm web (cần dữ liệu do loadtest-service chuẩn bị). Bậc tính theo **lượt mua/giây**; PASS thêm: ≥ 99% đơn có QR, p95 "tới lúc có QR" < 5 s. Tối đa 14′/lượt (token tài khoản test 15′) |
+| `purchase` | **Mua vé end-to-end**: giữ vé → checkout → ngân hàng giả lập "thành công" → IPN → Kafka → CONFIRMED → hỏi `/api/tickets/bookings/{id}` tới khi có QR. 1 lượt = 1 vé ≈ 6 request | **Ghi dữ liệu** – chỉ qua nút bấm web (cần dữ liệu do loadtest-service chuẩn bị). Bậc tính theo **lượt mua/giây**; PASS thêm: ≥ 99% đơn có QR, p95 "tới lúc có QR" < ô "Tới lúc có QR tối đa" (mặc định 5000 ms). Bậc FAIL ghi rõ tiêu chí trượt (p95 · lỗi · bỏ lượt · tới lúc có QR · % có vé). Tối đa 14′/lượt (token tài khoản test 15′) |
 
 ### Kịch bản `purchase` – dữ liệu test
 Bấm chạy → loadtest-service (bằng token của ADMIN đang bấm):

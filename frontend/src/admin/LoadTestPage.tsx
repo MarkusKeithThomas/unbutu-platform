@@ -11,7 +11,7 @@ const STATUS: Record<LtStatus, string> = {
   RUNNING: 'Đang chạy', COMPLETED: 'Xong', STOPPED: 'Đã dừng tay', ERROR: 'Lỗi', ABORTED: 'Bị ngắt (service restart)',
 };
 
-type Form = { scenario: string; steps: string; stepSeconds: string; p95Ms: string; maxErrPct: string; stopOnFail: boolean };
+type Form = { scenario: string; steps: string; stepSeconds: string; p95Ms: string; maxErrPct: string; stopOnFail: boolean; qrP95Ms: string };
 
 /** "50, 100,200" → [50,100,200]; null nếu sai. */
 function parseSteps(s: string): number[] | null {
@@ -34,7 +34,7 @@ export function LoadTestPage() {
   const [history, setHistory] = useState<LtRun[]>([]);
   const [detail, setDetail] = useState<LtDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [form, setForm] = useState<Form>({ scenario: 'browse', steps: '50,100,200', stepSeconds: '30', p95Ms: '300', maxErrPct: '1', stopOnFail: true });
+  const [form, setForm] = useState<Form>({ scenario: 'browse', steps: '50,100,200', stepSeconds: '30', p95Ms: '300', maxErrPct: '1', stopOnFail: true, qrP95Ms: '5000' });
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const watching = useRef<string | null>(null);   // id lượt đang theo dõi trực tiếp
@@ -81,6 +81,7 @@ export function LoadTestPage() {
       : steps.some((s, i) => i > 0 && s <= steps[i - 1]) ? 'Các bậc phải tăng dần'
       : steps.some((s) => s < 1 || s > maxRps) ? `Mỗi bậc từ 1 đến ${fmtNumber(maxRps)} rps`
       : !(stepSec >= 10 && stepSec <= 600) ? 'Thời gian mỗi bậc 10–600 giây'
+      : form.scenario === 'purchase' && !(Number(form.qrP95Ms) >= 500 && Number(form.qrP95Ms) <= 60000) ? 'Tới lúc có QR tối đa 500–60.000 ms'
       : config && steps.length * stepSec > maxSec ? `Tổng thời gian vượt ${maxSec / 60} phút của kịch bản này`
       : null;
 
@@ -90,9 +91,10 @@ export function LoadTestPage() {
     try {
       const run = await withToken((t) => loadtest.start(t, {
         scenario: form.scenario, steps, stepSeconds: stepSec, p95Ms: Number(form.p95Ms), maxErrPct: Number(form.maxErrPct), stopOnFail: form.stopOnFail,
+        qrP95Ms: form.scenario === 'purchase' ? Number(form.qrP95Ms) : null,
       }));
       watching.current = run.id;
-      setDetail({ run, stepViews: steps.map((rps) => ({ rps, state: 'PENDING', reqs: 0, achievedRps: null, p95: null, p99: null, errPct: null, dropped: 0, pass: null, ttqP95: null, ticketPct: null })), samples: [], logTail: null });
+      setDetail({ run, stepViews: steps.map((rps) => ({ rps, state: 'PENDING', reqs: 0, achievedRps: null, p95: null, p99: null, errPct: null, dropped: 0, pass: null, ttqP95: null, ticketPct: null, failed: [] })), samples: [], logTail: null });
       void loadHistory();
       toast.show('Đã bắt đầu – số liệu cập nhật mỗi 2 giây');
     } catch (e) {
@@ -143,6 +145,11 @@ export function LoadTestPage() {
           <label>Mỗi bậc (giây)<input type="number" min={10} max={600} value={form.stepSeconds} onChange={set('stepSeconds')} /></label>
           <label>p95 tối đa (ms)<input type="number" min={10} max={10000} value={form.p95Ms} onChange={set('p95Ms')} /></label>
           <label>Lỗi tối đa (%)<input type="number" min={0} max={50} step={0.1} value={form.maxErrPct} onChange={set('maxErrPct')} /></label>
+          {form.scenario === 'purchase' && (
+            <label title="Thời gian từ lúc giữ vé tới lúc có vé QR (gồm thanh toán, IPN, Kafka, phát vé)">Tới lúc có QR tối đa (ms, p95)
+              <input type="number" min={500} max={60000} step={500} value={form.qrP95Ms} onChange={set('qrP95Ms')} />
+            </label>
+          )}
           <label className="lt-check"><input type="checkbox" checked={form.stopOnFail} onChange={set('stopOnFail')} />Dừng ngay khi 1 bậc FAIL</label>
           <div className="lt-submit">
             <button type="submit" className="a-btn primary" disabled={!!formError || running || !config}>Chạy load test</button>
@@ -189,11 +196,29 @@ export function LoadTestPage() {
   );
 }
 
-function Verdict({ step }: { step: LtStep }) {
+/** Mã tiêu chí trượt (lib/steps.js) → lời giải thích ngắn. */
+function reason(code: string, run: LtRun): string {
+  switch (code) {
+    case 'p95': return `p95 request ≥ ${run.p95Ms} ms`;
+    case 'errors': return `lỗi ≥ ${run.maxErrPct}%`;
+    case 'dropped': return 'bỏ lượt ≥ 5% (hết người dùng ảo – hệ thống trả lời không kịp)';
+    case 'qr_time': return `tới lúc có QR p95 ≥ ${run.qrP95Ms ?? 5000} ms`;
+    case 'tickets': return '< 99% đơn có vé QR';
+    default: return code;
+  }
+}
+
+function Verdict({ step, run }: { step: LtStep; run: LtRun }) {
   if (step.state === 'PENDING') return <span className="lt-muted">Chờ</span>;
   if (step.state === 'SKIPPED') return <span className="lt-muted">Không chạy</span>;
   if (step.pass == null) return <span className="lt-badge run">● Đang chạy</span>;
-  return step.pass ? <span className="lt-badge ok">✓ PASS</span> : <span className="lt-badge bad">✕ FAIL</span>;
+  if (step.pass) return <span className="lt-badge ok">✓ PASS</span>;
+  return (
+    <span className="lt-verdict">
+      <span className="lt-badge bad">✕ FAIL</span>
+      {(step.failed ?? []).map((c) => <span key={c} className="lt-reason">{reason(c, run)}</span>)}
+    </span>
+  );
 }
 
 function RunView({ detail, unit }: { detail: LtDetail; unit: string }) {
@@ -213,7 +238,7 @@ function RunView({ detail, unit }: { detail: LtDetail; unit: string }) {
         <h2 id="lt-run-h" className="lt-h2">
           {live ? 'Đang chạy' : 'Kết quả'} · <span className="code">{run.scenario}</span> · {fmtStamp(run.startedAt)}
         </h2>
-        <span className="lt-muted">{STATUS[run.status]} · tiêu chí: p95 &lt; {run.p95Ms} ms, lỗi &lt; {run.maxErrPct}%, mỗi bậc {run.stepSeconds}s</span>
+        <span className="lt-muted">{STATUS[run.status]} · tiêu chí: p95 request &lt; {run.p95Ms} ms, lỗi &lt; {run.maxErrPct}%, bỏ lượt &lt; 5%{run.qrP95Ms != null && <>, tới lúc có QR p95 &lt; {run.qrP95Ms} ms, ≥ 99% đơn có vé</>} · mỗi bậc {run.stepSeconds}s</span>
       </div>
 
       <div className="lt-tiles">
@@ -259,7 +284,7 @@ function RunView({ detail, unit }: { detail: LtDetail; unit: string }) {
                   <td className="num">{s.ttqP95 != null ? `${fmtNumber(Math.round(s.ttqP95))} ms` : '—'}</td>
                   <td className="num">{s.ticketPct != null ? `${s.ticketPct.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%` : '—'}</td>
                 </>}
-                <td><Verdict step={s} /></td>
+                <td><Verdict step={s} run={run} /></td>
               </tr>
             ))}
           </tbody>

@@ -106,6 +106,12 @@ export function summary(data) {
     const ok = Object.entries(data.metrics)
       .filter(([k]) => k.endsWith(sel))
       .every(([, x]) => Object.values(x.thresholds || {}).every((t) => t.ok));
+    // Tiêu chí nào trượt (để UI ghi rõ lý do FAIL): tên metric → mã ngắn.
+    const CODES = { http_req_duration: 'p95', http_req_failed: 'errors', dropped_iterations: 'dropped',
+      time_to_ticket: 'qr_time', ticket_issued: 'tickets' };
+    const failedChecks = Object.entries(data.metrics)
+      .filter(([k, x]) => k.endsWith(sel) && Object.values(x.thresholds || {}).some((t) => !t.ok))
+      .map(([k]) => CODES[k.slice(0, -sel.length)] || k.slice(0, -sel.length));
     const ttq = m('time_to_ticket');
     const issued = m('ticket_issued');
     const row = {
@@ -116,6 +122,7 @@ export function summary(data) {
       httpRps: reqs / STEP_SEC,
       ttqP95: ttq?.values['p(95)'],
       ticketPct: issued ? issued.values.rate * 100 : undefined,
+      failedChecks,
       p95: dur?.values['p(95)'],
       p99: dur?.values['p(99)'],
       errPct: (failed?.values.rate || 0) * 100,
@@ -128,7 +135,8 @@ export function summary(data) {
 
   const lines = [
     '',
-    `Tiêu chí mỗi bậc: p95 < ${P95_MS} ms · lỗi < ${MAX_ERR_PCT}% · bỏ lượt < ${DROP_PCT}% · mỗi bậc ${STEP_SEC}s`,
+    `Tiêu chí mỗi bậc: p95 < ${P95_MS} ms · lỗi < ${MAX_ERR_PCT}% · bỏ lượt < ${DROP_PCT}% · mỗi bậc ${STEP_SEC}s` +
+      (__ENV.QR_P95_MS ? ` · tới lúc có QR p95 < ${__ENV.QR_P95_MS} ms · ≥ 99% đơn có vé` : ''),
     `${pad('Bậc', 10)}${pad('đạt rps', 10)}${pad('p95', 10)}${pad('p99', 10)}${pad('lỗi', 8)}${pad('bỏ lượt', 9)}kết quả`,
   ];
   for (const r of rows) {
@@ -138,7 +146,7 @@ export function summary(data) {
     }
     lines.push(
       pad(`${r.rps} rps`, 10) + pad(r.achievedRps.toFixed(0), 10) + pad(ms(r.p95), 10) + pad(ms(r.p99), 10) +
-        pad(`${r.errPct.toFixed(2)}%`, 8) + pad(r.dropped, 9) + (r.pass ? 'PASS' : 'FAIL') +
+        pad(`${r.errPct.toFixed(2)}%`, 8) + pad(r.dropped, 9) + (r.pass ? 'PASS' : `FAIL (${r.failedChecks.join(', ')})`) +
         (r.ttqP95 !== undefined ? `   · tới lúc có QR p95 ${ms(r.ttqP95)}, ${r.ticketPct?.toFixed(1)}% đơn có vé` : ''),
     );
   }
