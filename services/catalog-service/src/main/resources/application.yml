@@ -20,6 +20,11 @@ spring:
         delivery.timeout.ms: 12000       # < thời gian relay chờ (15 s)
     admin:
       operation-timeout: 5s              # tạo topic lúc khởi động; broker chưa lên → không fail, OutboxRelay tạo lại trước lần gửi đầu
+  data:
+    redis:                               # chỉ để cache response (tầng 2) – Redis lỗi thì đọc DB, API vẫn chạy
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      timeout: 200ms                     # Redis chậm → bỏ qua cache nhanh, không giữ thread request
   jpa:
     open-in-view: false
     hibernate:
@@ -30,6 +35,11 @@ catalog:
     # Public key của identity-service (gọi nội bộ, cache trong bộ nhớ). Token phải có iss khớp + token_use=access.
     jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
     issuer: ${JWT_ISSUER:unbutu-identity}
+  # Cache API công khai (danh sách / chi tiết / hạng vé) – CatalogCache. Admin ghi → xoá cả 2 tầng sau commit.
+  cache:
+    enabled: ${CATALOG_CACHE_ENABLED:true}
+    local-ttl: ${CATALOG_CACHE_LOCAL_TTL:5s}     # tầng 1 (Caffeine, mỗi instance) – instance khác thấy thay đổi chậm ≤ 5 s
+    redis-ttl: ${CATALOG_CACHE_REDIS_TTL:30s}    # tầng 2 (Redis, dùng chung) – khớp Cache-Control max-age=30
 
 
 # Transactional Outbox (libs/outbox) → Redpanda (catalog.event.v1). Redpanda tắt thì API vẫn chạy, event chờ trong bảng outbox.
@@ -45,3 +55,6 @@ management:
     web:
       exposure:
         include: health,info
+  health:
+    redis:
+      enabled: false   # Redis chỉ là cache: Redis chết không được làm catalog "down" (healthcheck/deploy)

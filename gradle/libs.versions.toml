@@ -48,6 +48,8 @@ spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-sta
 # Redis (inventory: giữ vé bằng Lua) + JDBC thuần (inventory không dùng JPA)
 spring-boot-starter-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+# Cache trong bộ nhớ (catalog: tầng 1 trước Redis) – version từ BOM Spring Boot
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
 
 # libs/outbox (compileOnly – service tự mang starter kafka/jdbc)
 spring-kafka = { module = "org.springframework.kafka:spring-kafka" }

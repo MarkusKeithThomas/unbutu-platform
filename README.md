@@ -12,7 +12,7 @@ Chạy thật trên 1 server nhà (`unbutu`, Docker Compose) và public qua Tail
 | Thành phần | Trạng thái |
 |---|---|
 | `api-gateway` | Chạy prod. Có routing, `X-Request-Id`, timeout. Chưa có access log, JWT, CORS |
-| `catalog-service` | Chạy prod: sự kiện + hạng vé (đọc công khai, ghi cần ADMIN) |
+| `catalog-service` | Chạy prod: sự kiện + hạng vé (đọc công khai, ghi cần ADMIN). API công khai cache Caffeine 5 s + Redis 30 s, admin ghi → xoá |
 | `inventory-service` | Tồn kho + giữ vé: Redis Lua (oversell = 0) + sổ cái Postgres, nghe `catalog.event.v1` |
 | `booking-service` | Giữ vé 10′ (idempotent, 4 vé/tài khoản/sự kiện), huỷ, tự hết hạn; bảng giá từ `catalog.event.v1`; phát `booking.event.v1` (`booking.confirmed`, Outbox) |
 | `payment-service` | Thanh toán giao thức VNPay 2.1.0 – **cổng giả lập** (IPN là nguồn sự thật, Outbox `payment.result.v1`, hoàn tiền) |
