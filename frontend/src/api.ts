@@ -66,6 +66,7 @@ export type CatalogEvent = {
   description: string | null;
   venue: string | null;
   startsAt: string | null; // ISO-8601 (UTC)
+  hidden: boolean;          // ẩn khỏi danh sách của khách (vd. sự kiện load test)
   updatedAt: string;
 };
 export type EventInput = Omit<CatalogEvent, 'id' | 'updatedAt'>;
@@ -216,19 +217,20 @@ export function errorMessage(e: unknown): string {
 
 // ---- load test (chỉ ADMIN, loadtest-service) ----
 
-export type LtScenario = { name: string; title: string; description: string; writes: boolean };
+export type LtScenario = { name: string; title: string; description: string; writes: boolean; unit: string; maxDurationSeconds: number };
 export type LtConfig = { scenarios: LtScenario[]; limits: { maxRps: number; maxDurationSeconds: number } };
 export type LtRunRequest = { scenario: string; steps: number[]; stepSeconds: number; p95Ms: number; maxErrPct: number; stopOnFail: boolean };
 export type LtStatus = 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'ERROR' | 'ABORTED';
 export type LtRun = LtRunRequest & {
-  id: string; status: LtStatus; startedBy: string; startedAt: string; finishedAt: string | null; passUpToRps: number | null;
+  id: string; status: LtStatus; startedBy: string; startedAt: string; finishedAt: string | null; passUpToRps: number | null; eventId: string | null;
 };
 export type LtStep = {
   rps: number; state: 'PENDING' | 'RUNNING' | 'DONE' | 'SKIPPED'; reqs: number; achievedRps: number | null;
   p95: number | null; p99: number | null; errPct: number | null; dropped: number; pass: boolean | null;
+  ttqP95: number | null; ticketPct: number | null; // chỉ kịch bản mua vé
 };
-/** 1 điểm / 2 s. p95/p99/errPct: dồn từ đầu bậc đang chạy. */
-export type LtSample = { t: number; rps: number; vus: number; stepRps: number; p95: number | null; p99: number | null; errPct: number };
+/** 1 điểm / 2 s. rps = lượt/giây, httpRps = request/giây. p95/errPct/ttqP95: dồn từ đầu bậc đang chạy. */
+export type LtSample = { t: number; rps: number; httpRps: number; vus: number; stepRps: number; p95: number | null; p99: number | null; errPct: number; ttqP95: number | null };
 export type LtDetail = { run: LtRun; stepViews: LtStep[]; samples: LtSample[]; logTail: string | null };
 
 export const loadtest = {

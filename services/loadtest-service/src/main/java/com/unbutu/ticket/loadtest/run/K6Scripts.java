@@ -24,7 +24,16 @@ class K6Scripts {
     static final List<RunDtos.Scenario> SCENARIOS = List.of(
             new RunDtos.Scenario("browse", "Xem sự kiện",
                     "Chỉ đọc: 40% danh sách sự kiện · 20% chi tiết · 20% hạng vé · 20% \"Còn x/y\" (inventory, Redis). "
-                            + "Mỗi lượt = 1 request. Cần ≥ 1 sự kiện đang bán.", false));
+                            + "Mỗi lượt = 1 request. Cần ≥ 1 sự kiện đang bán.", false, "request/giây", 1800),
+            new RunDtos.Scenario("purchase", "Mua vé end-to-end",
+                    "Ghi dữ liệu: mỗi lượt = 1 khách mua 1 vé – giữ vé → checkout → ngân hàng giả lập → IPN → Kafka "
+                            + "→ CONFIRMED → vé QR (đo cả thời gian tới lúc có QR). Tự tạo sự kiện ẨN mới + bật cờ bỏ giới hạn "
+                            + "4 vé cho đúng sự kiện đó, dùng 1 tài khoản test mua song song. Lưu ý: ngân hàng giả lập gửi "
+                            + "IPN tuần tự ≤ 50/giây.", true, "lượt mua/giây", 840));
+
+    static RunDtos.Scenario scenario(String name) {
+        return SCENARIOS.stream().filter(s -> s.name().equals(name)).findFirst().orElse(null);
+    }
 
     private final Path dir;
 

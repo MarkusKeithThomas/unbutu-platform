@@ -28,21 +28,28 @@ public final class RunDtos {
             boolean stopOnFail) {
     }
 
-    public record Scenario(String name, String title, String description, boolean writes) {
+    /** maxDurationSeconds: trần riêng của kịch bản (purchase: token tài khoản test sống 15′ → ≤ 14′). */
+    public record Scenario(String name, String title, String description, boolean writes, String unit,
+                           long maxDurationSeconds) {
     }
 
-    /** Một điểm trên biểu đồ (2 s/lần). p95/p99/lỗi: tính dồn từ đầu bậc đang chạy. */
-    public record Sample(double t, double rps, int vus, int stepRps, Double p95, Double p99, double errPct) {
+    /** Một điểm trên biểu đồ (2 s/lần). rps = lượt/giây; httpRps = request/giây. p95/lỗi/ttq: dồn từ đầu bậc đang chạy. */
+    public record Sample(double t, double rps, double httpRps, int vus, int stepRps, Double p95, Double p99, double errPct,
+                         Double ttqP95) {
     }
 
     /** Số liệu từng bậc. Trong lúc chạy: ước tính trực tiếp; xong: thay bằng bảng của k6 (result). */
+    /** ttqP95 / ticketPct: chỉ kịch bản mua vé (thời gian bấm mua → có QR, % đơn có vé). */
     public record StepView(int rps, String state, long reqs, Double achievedRps, Double p95, Double p99, Double errPct,
-                           long dropped, Boolean pass) {
+                           long dropped, Boolean pass, Double ttqP95, Double ticketPct) {
+        static StepView pending(int rps, String state) {
+            return new StepView(rps, state, 0, null, null, null, null, 0, null, null, null);
+        }
     }
 
     public record RunSummary(UUID id, String scenario, List<Integer> steps, int stepSeconds, int p95Ms, double maxErrPct,
                              boolean stopOnFail, String status, String startedBy, Instant startedAt, Instant finishedAt,
-                             Integer passUpToRps) {
+                             Integer passUpToRps, UUID eventId) {
     }
 
     public record RunDetail(RunSummary run, List<StepView> stepViews, List<Sample> samples, JsonNode result, String logTail) {

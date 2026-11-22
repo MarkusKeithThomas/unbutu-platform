@@ -22,6 +22,13 @@ loadtest:
   work-dir: ${LOADTEST_WORK_DIR:/tmp/loadtest}
   api-port: 6565
   poll-interval: 2s
+  # Kịch bản mua vé: chuẩn bị dữ liệu bằng token ADMIN đang bấm (gọi thẳng service trong network).
+  catalog-url: ${CATALOG_SERVICE_URL:http://catalog-service:8080}
+  booking-url: ${BOOKING_SERVICE_URL:http://booking-service:8080}
+  identity-url: ${IDENTITY_SERVICE_URL:http://identity-service:8080}
+  account:
+    email: ${LOADTEST_ACCOUNT_EMAIL:loadtest-buyer@unbutu.test}
+    password: ${LOADTEST_ACCOUNT_PASSWORD:}    # prod: AWS Secrets Manager (ADR-0004); rỗng → không chạy được purchase
 
 server:
   port: ${SERVER_PORT:8080}

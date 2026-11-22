@@ -15,3 +15,8 @@ loadtest:
   k6-binary: ${K6_BINARY:k6}
   target-base-url: http://localhost:8080
   max-rps: 300                     # máy dev
+  catalog-url: http://localhost:8082
+  booking-url: http://localhost:8084
+  identity-url: http://localhost:8081
+  account:
+    password: loadtest-pass-123      # chỉ local

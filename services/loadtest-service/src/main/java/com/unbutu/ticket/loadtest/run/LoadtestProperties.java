@@ -12,8 +12,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param workDir       nơi giải nén kịch bản + file kết quả/log tạm của k6
  * @param apiPort       cổng REST API của k6 (chỉ 127.0.0.1 trong container) – đọc số liệu trực tiếp, dừng test
  * @param pollInterval  chu kỳ đọc số liệu = độ mịn biểu đồ
+ * @param catalogUrl    tạo sự kiện ẩn + hạng vé cho kịch bản mua vé
+ * @param bookingUrl    bật/tắt cờ bỏ giới hạn 4 vé cho sự kiện load test
+ * @param identityUrl   đăng ký/đăng nhập tài khoản test
+ * @param account       tài khoản test mua vé (mật khẩu: secret – ADR-0004)
  */
 @ConfigurationProperties("loadtest")
 public record LoadtestProperties(String k6Binary, String targetBaseUrl, int maxRps, Duration maxDuration, Path workDir,
-                                 int apiPort, Duration pollInterval) {
+                                 int apiPort, Duration pollInterval, String catalogUrl, String bookingUrl,
+                                 String identityUrl, Account account) {
+
+    public record Account(String email, String password) {
+    }
 }

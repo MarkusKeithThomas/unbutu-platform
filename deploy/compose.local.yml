@@ -212,6 +212,9 @@ services:
       IDENTITY_JWKS_URI: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}/.well-known/jwks.json
       LOADTEST_TARGET_URL: http://api-gateway:8080
       LOADTEST_MAX_RPS: "300"               # máy dev
+      LOADTEST_ACCOUNT_PASSWORD: loadtest-pass-123   # chỉ local (prod: AWS SM)
+      CATALOG_SERVICE_URL: ${CATALOG_SERVICE_URL:-http://catalog-service:8080}
+      BOOKING_SERVICE_URL: ${BOOKING_SERVICE_URL:-http://booking-service:8080}
       JAVA_TOOL_OPTIONS: -Xmx256m -XX:+ExitOnOutOfMemoryError
     extra_hosts:
       - "host.docker.internal:host-gateway"

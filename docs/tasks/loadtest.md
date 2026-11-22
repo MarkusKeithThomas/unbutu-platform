@@ -12,11 +12,12 @@ Nút bấm trên web (`loadtest-service`) để sau, dùng lại kịch bản k6
   rồi dò kỹ quanh bậc FAIL. Ghi `docs/loadtest/baseline.md`: X rps, p95/p99, nghẽn ở đâu (SigNoz RED + Container).
   Ghi nhận: service đang chạy **Serial GC** vì `mem_limit 512m` (< 1792 MB → JVM chọn Serial), heap tối đa 384 MB – ứng viên nghẽn.
   Lần chạy thử 5/10 rps: p99 bậc 10 rps = 847 ms (JIT còn nguội?) – xem lại khi chạy thật.
-- [ ] **LT-B · Kịch bản `hold` / `checkout`**: tài khoản test (giới hạn 4 vé/tài khoản/sự kiện → nhiều tài khoản hoặc ngoại lệ),
-  sự kiện "Load Test" reset được, dọn dữ liệu sau mỗi lượt, cổng thanh toán giả lập chỉ cho ADMIN/test (thay PAY-1c (3)).
+- [ ] **LT-B · Kịch bản `purchase` end-to-end – code xong (PR feat/loadtest-purchase)**: sự kiện ẩn (catalog `hidden`), cờ bỏ giới hạn
+  theo sự kiện (booking `limit_bypass`), 1 tài khoản test, đo tới lúc có QR. Rollout: thêm key `LOADTEST_ACCOUNT_PASSWORD` vào secret
+  + env.yaml (pro-ticket-workload #8). Sau: sửa trần IPN giả lập 50/s; kịch bản flash-sale kho nhỏ để kiểm oversell.
 - [ ] **LT-C · Nút bấm trên web – rollout prod**: code xong (PR feat/loadtest-ui-service): `loadtest-service` + trang `/admin/loadtest`
-  (chạy/dừng, biểu đồ rps + p95 trực tiếp, bảng PASS/FAIL, "Chịu được X rps", lịch sử). Trước khi Approve deploy: secret
-  `unbutu/prod/loadtest-service#DB_PASSWORD` + PR pro-ticket-workload (env.yaml + `SERVICE_DATABASES`) + tạo `loadtest_db` (runbook add-service-database).
+  (chạy/dừng, biểu đồ rps + p95 trực tiếp, bảng PASS/FAIL, "Chịu được X rps", lịch sử). Đã có (2026-11-22): secret
+  `unbutu/prod/loadtest-service` + `loadtest_db` trên prod. Còn: merge pro-ticket-workload #8 → Approve deploy.
 - [ ] **LT-E · k6 → SigNoz + dashboard "Load test"** (sau LT-C): k6 `--out opentelemetry` vào collector, 1 dashboard ghép rps/p95 của k6
   với CPU container + p99 từng service để thấy nghẽn ở đâu cùng một trục thời gian.
 - [ ] **LT-D · Alert rule trên UI SigNoz** (OBS-5, hoãn): 3 rule theo runbook `signoz.md` §Alert + diễn tập.

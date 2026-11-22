@@ -37,6 +37,10 @@ public class Event {
     @Column(name = "starts_at")
     private Instant startsAt;
 
+    /** Ẩn khỏi danh sách của khách (sự kiện load test) – vẫn xem/mua được qua id. */
+    @Column(nullable = false)
+    private boolean hidden;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -57,6 +61,7 @@ public class Event {
         this.description = blankToNull(req.description());
         this.venue = blankToNull(req.venue());
         this.startsAt = req.startsAt();
+        this.hidden = Boolean.TRUE.equals(req.hidden());
         this.updatedAt = now;
     }
 

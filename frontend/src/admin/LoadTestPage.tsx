@@ -74,14 +74,15 @@ export function LoadTestPage() {
   const steps = parseSteps(form.steps);
   const stepSec = Number(form.stepSeconds);
   const maxRps = config?.limits.maxRps ?? 0;
+  const scenario = config?.scenarios.find((s) => s.name === form.scenario);
+  const maxSec = Math.min(config?.limits.maxDurationSeconds ?? 0, scenario?.maxDurationSeconds ?? Infinity);
   const formError =
     !steps ? 'Bậc rps dạng 50,100,200'
       : steps.some((s, i) => i > 0 && s <= steps[i - 1]) ? 'Các bậc phải tăng dần'
       : steps.some((s) => s < 1 || s > maxRps) ? `Mỗi bậc từ 1 đến ${fmtNumber(maxRps)} rps`
       : !(stepSec >= 10 && stepSec <= 600) ? 'Thời gian mỗi bậc 10–600 giây'
-      : config && steps.length * stepSec > config.limits.maxDurationSeconds ? `Tổng thời gian vượt ${config.limits.maxDurationSeconds / 60} phút`
+      : config && steps.length * stepSec > maxSec ? `Tổng thời gian vượt ${maxSec / 60} phút của kịch bản này`
       : null;
-  const scenario = config?.scenarios.find((s) => s.name === form.scenario);
 
   const start = async () => {
     if (!steps) return;
@@ -91,7 +92,7 @@ export function LoadTestPage() {
         scenario: form.scenario, steps, stepSeconds: stepSec, p95Ms: Number(form.p95Ms), maxErrPct: Number(form.maxErrPct), stopOnFail: form.stopOnFail,
       }));
       watching.current = run.id;
-      setDetail({ run, stepViews: steps.map((rps) => ({ rps, state: 'PENDING', reqs: 0, achievedRps: null, p95: null, p99: null, errPct: null, dropped: 0, pass: null })), samples: [], logTail: null });
+      setDetail({ run, stepViews: steps.map((rps) => ({ rps, state: 'PENDING', reqs: 0, achievedRps: null, p95: null, p99: null, errPct: null, dropped: 0, pass: null, ttqP95: null, ticketPct: null })), samples: [], logTail: null });
       void loadHistory();
       toast.show('Đã bắt đầu – số liệu cập nhật mỗi 2 giây');
     } catch (e) {
@@ -136,7 +137,7 @@ export function LoadTestPage() {
               {config?.scenarios.map((s) => <option key={s.name} value={s.name}>{s.title} ({s.name})</option>)}
             </select>
           </label>
-          <label>Các bậc rps
+          <label>Các bậc ({scenario?.unit ?? 'rps'})
             <input value={form.steps} onChange={set('steps')} inputMode="numeric" placeholder="50,100,200" aria-invalid={!!formError} />
           </label>
           <label>Mỗi bậc (giây)<input type="number" min={10} max={600} value={form.stepSeconds} onChange={set('stepSeconds')} /></label>
@@ -150,10 +151,10 @@ export function LoadTestPage() {
             </span>
           </div>
         </form>
-        {scenario && <p className="lt-muted lt-desc">{scenario.description}</p>}
+        {scenario && <p className={scenario.writes ? 'lt-desc lt-warn' : 'lt-muted lt-desc'}>{scenario.writes && <b>Ghi dữ liệu thật vào prod. </b>}{scenario.description}</p>}
       </section>
 
-      {detail && <RunView detail={detail} />}
+      {detail && <RunView detail={detail} unit={config?.scenarios.find((s) => s.name === detail.run.scenario)?.unit ?? 'rps'} />}
 
       <section className="a-panel" aria-labelledby="lt-hist">
         <h2 id="lt-hist" className="lt-h2 lt-pad">Lịch sử</h2>
@@ -167,7 +168,7 @@ export function LoadTestPage() {
                   <td className="code">{r.scenario}</td>
                   <td className="code">{r.steps.join(', ')}</td>
                   <td>{r.stepSeconds}s</td>
-                  <td className="strong">{r.passUpToRps ? `${fmtNumber(r.passUpToRps)} rps` : r.status === 'RUNNING' ? '…' : '—'}</td>
+                  <td className="strong">{r.passUpToRps ? `${fmtNumber(r.passUpToRps)}/s` : r.status === 'RUNNING' ? '…' : '—'}</td>
                   <td>{STATUS[r.status]}</td>
                   <td className="small">{r.startedBy}</td>
                   <td><button type="button" className="a-btn sm" onClick={() => open(r.id)}>Xem</button></td>
@@ -195,8 +196,9 @@ function Verdict({ step }: { step: LtStep }) {
   return step.pass ? <span className="lt-badge ok">✓ PASS</span> : <span className="lt-badge bad">✕ FAIL</span>;
 }
 
-function RunView({ detail }: { detail: LtDetail }) {
+function RunView({ detail, unit }: { detail: LtDetail; unit: string }) {
   const { run, stepViews, samples } = detail;
+  const purchase = stepViews.some((s) => s.ttqP95 != null || s.ticketPct != null) || run.scenario === 'purchase';
   const live = run.status === 'RUNNING';
   const last = samples[samples.length - 1];
   const firstFail = stepViews.find((s) => s.pass === false);
@@ -217,37 +219,46 @@ function RunView({ detail }: { detail: LtDetail }) {
       <div className="lt-tiles">
         <div className="lt-tile hero">
           <small>Chịu được</small>
-          <strong>{passUpTo ? `${fmtNumber(passUpTo)} rps` : '—'}</strong>
-          <span>{firstFail ? `bậc ${fmtNumber(firstFail.rps)} rps FAIL` : live ? 'tạm tính theo các bậc đã xong' : passUpTo ? 'mọi bậc đều PASS – thử bậc cao hơn' : 'chưa có bậc nào PASS'}</span>
+          <strong>{passUpTo ? `${fmtNumber(passUpTo)}` : '—'}</strong>
+          <span>{passUpTo ? `${unit} · ` : ''}{firstFail ? `bậc ${fmtNumber(firstFail.rps)} FAIL` : live ? 'tạm tính theo các bậc đã xong' : passUpTo ? 'mọi bậc đều PASS – thử bậc cao hơn' : 'chưa có bậc nào PASS'}</span>
         </div>
-        <div className="lt-tile"><small>rps thực tế</small><strong>{last ? fmtNumber(Math.round(last.rps)) : '—'}</strong><span>mục tiêu {last ? fmtNumber(last.stepRps) : '—'}</span></div>
+        <div className="lt-tile"><small>{unit} thực tế</small><strong>{last ? fmtNumber(Math.round(last.rps)) : '—'}</strong><span>mục tiêu {last ? fmtNumber(last.stepRps) : '—'}{purchase && last ? ` · ${fmtNumber(Math.round(last.httpRps))} request/giây` : ''}</span></div>
+        {purchase && <div className="lt-tile"><small>Tới lúc có QR (p95)</small><strong>{last?.ttqP95 != null ? `${fmtNumber(Math.round(last.ttqP95))} ms` : '—'}</strong><span>bấm mua → vé QR, bậc hiện tại</span></div>}
         <div className="lt-tile"><small>p95 bậc hiện tại</small><strong>{last?.p95 != null ? `${fmtNumber(last.p95)} ms` : '—'}</strong><span>p99 {last?.p99 != null ? `${fmtNumber(last.p99)} ms` : '—'}</span></div>
         <div className="lt-tile"><small>Lỗi bậc hiện tại</small><strong>{last ? `${last.errPct.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%` : '—'}</strong><span>{last ? `${fmtNumber(last.vus)} người dùng ảo` : ''}</span></div>
       </div>
 
       <div className="lt-charts">
-        <LineChart title="Request/giây" x={x} empty={live ? 'k6 đang khởi động…' : 'Không có số liệu'} series={[
-          { name: 'rps thực tế', values: samples.map((s) => s.rps), color: SERIES_1, unit: 'rps' },
-          { name: 'mục tiêu của bậc', values: samples.map((s) => s.stepRps), muted: true, unit: 'rps' },
+        <LineChart title={unit.charAt(0).toUpperCase() + unit.slice(1)} x={x} empty={live ? 'k6 đang khởi động…' : 'Không có số liệu'} series={[
+          { name: 'thực tế', values: samples.map((s) => s.rps), color: SERIES_1, unit: '/s' },
+          { name: 'mục tiêu của bậc', values: samples.map((s) => s.stepRps), muted: true, unit: '/s' },
         ]} />
         <LineChart title="Độ trễ p95 (ms, dồn từ đầu bậc)" x={x} empty={live ? 'k6 đang khởi động…' : 'Không có số liệu'}
           threshold={{ value: run.p95Ms, label: `ngưỡng ${run.p95Ms} ms` }}
           series={[{ name: 'p95', values: samples.map((s) => s.p95), color: SERIES_1, unit: 'ms' }]} />
+        {purchase && (
+          <LineChart title="Thời gian bấm mua → có vé QR, p95 (ms, dồn từ đầu bậc)" x={x} empty={live ? 'Chờ đơn đầu tiên có QR…' : 'Không có số liệu'}
+            series={[{ name: 'tới lúc có QR p95', values: samples.map((s) => s.ttqP95), color: SERIES_1, unit: 'ms' }]} />
+        )}
       </div>
 
       <div className="a-table-wrap">
         <table className="a-table lt-steps">
-          <thead><tr><th>Bậc</th><th className="num">Đạt rps</th><th className="num">Số request</th><th className="num">p95</th><th className="num">p99</th><th className="num">Lỗi</th><th className="num">Bỏ lượt</th><th>Kết quả</th></tr></thead>
+          <thead><tr><th>Bậc</th><th className="num">Đạt /giây</th><th className="num">Số lượt</th><th className="num">p95</th><th className="num">p99</th><th className="num">Lỗi</th><th className="num">Bỏ lượt</th>{purchase && <><th className="num">Có QR p95</th><th className="num">% đơn có vé</th></>}<th>Kết quả</th></tr></thead>
           <tbody>
             {stepViews.map((s) => (
               <tr key={s.rps}>
-                <td className="strong">{fmtNumber(s.rps)} rps</td>
+                <td className="strong">{fmtNumber(s.rps)}/s</td>
                 <td className="num">{s.achievedRps != null ? fmtNumber(Math.round(s.achievedRps)) : '—'}</td>
                 <td className="num">{s.reqs ? fmtNumber(s.reqs) : '—'}</td>
                 <td className="num">{s.p95 != null ? `${fmtNumber(s.p95)} ms` : '—'}</td>
                 <td className="num">{s.p99 != null ? `${fmtNumber(s.p99)} ms` : '—'}</td>
                 <td className="num">{s.errPct != null ? `${s.errPct.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%` : '—'}</td>
                 <td className="num">{s.state === 'PENDING' || s.state === 'SKIPPED' ? '—' : fmtNumber(s.dropped)}</td>
+                {purchase && <>
+                  <td className="num">{s.ttqP95 != null ? `${fmtNumber(Math.round(s.ttqP95))} ms` : '—'}</td>
+                  <td className="num">{s.ticketPct != null ? `${s.ticketPct.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%` : '—'}</td>
+                </>}
                 <td><Verdict step={s} /></td>
               </tr>
             ))}
