@@ -4,14 +4,12 @@
 > Chi tiết task: `docs/tasks/<mảng>.md` (chỉ đọc mục "Đang mở"). Cập nhật: 2026-11-22.
 
 ## Làm tiếp – Load test (`docs/tasks/loadtest.md`, runbook `docs/runbooks/loadtest.md`)
-1. **LT-C rollout prod** (`loadtest-service` + `/admin/loadtest`, PR #45 đã merge) – theo thứ tự, **chưa Approve deploy trước bước c**:
-   a. Người dùng tạo secret `unbutu/prod/loadtest-service` key `DB_PASSWORD` (AWS Console, ap-southeast-1).
-   b. Merge PR pro-ticket-workload #8 (env.yaml + `SERVICE_DATABASES` loadtest) → plan/apply xanh.
-   c. Tạo `loadtest_db`: `docs/runbooks/add-service-database.md` với `svc=loadtest`.
-   d. Approve Deploy bản mới nhất → mở `https://unbutu.tail3c11f4.ts.net/admin/loadtest`, chạy `browse` 50,100 thử.
-2. **LT-A**: dùng trang đó dò điểm gãy `browse` (vd. 100,200,400,800) → `docs/loadtest/baseline.md`.
-3. LT-B kịch bản mua vé (sự kiện ẩn + tài khoản test được miễn giới hạn 4 vé – cần sửa catalog/identity/booking);
-   LT-E k6 → SigNoz + dashboard "Load test".
+1. **Rollout LT-B + LT-C** (#45 loadtest-service, #47 mua vé end-to-end – đã merge; secret + `loadtest_db` + env-map
+   pro-ticket-workload #8/#9 đã xong 2026-11-22): người dùng **Approve bản Deploy mới nhất** (chứa #47) → kiểm tra
+   `https://unbutu.tail3c11f4.ts.net/admin/loadtest`: `browse` 50,100 rồi `purchase` 2,5 (sự kiện ẩn tự tạo, xong lượt PAUSED).
+2. **LT-A**: dò điểm gãy `browse` + `purchase` → `docs/loadtest/baseline.md`. Trần giả: IPN giả lập tuần tự ≤ 50/s.
+3. Sau: sửa trần IPN giả lập; flash-sale kho nhỏ kiểm oversell; LT-E k6 → SigNoz + dashboard "Load test".
+   Giao diện `/admin/loadtest` + công tắc "Ẩn khỏi khách" mới kiểm bằng tsc – người dùng xem trên trình duyệt.
 
 ## Song song / sau
 - TIX-2: check-in, email vé, `booking.refunded` → VOID (`docs/tasks/catalog.md`).
