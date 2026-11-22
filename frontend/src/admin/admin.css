@@ -160,3 +160,7 @@ fieldset.a-fieldset legend { font-size: 13px; font-weight: 600; margin-bottom: 8
 .a-table tr.lt-sel td { background: #F0F6FF; }
 .lt-log summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .lt-log pre { max-height: 280px; overflow: auto; background: #0B1220; color: #E5E7EB; padding: 12px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; }
+.a-hidden-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #F3F4F6; color: #374151; font-size: 12px; font-weight: 600; }
+.a-switch { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: #374151; cursor: pointer; }
+.a-switch input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
+.lt-warn { color: #92400E; background: #FEF3C7; padding: 8px 12px; border-radius: 8px; font-size: 13px; }

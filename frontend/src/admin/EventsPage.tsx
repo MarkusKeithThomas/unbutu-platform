@@ -5,7 +5,7 @@ import { AdminLayout, Confirm, Drawer, Pager, PlusIcon, SearchBox, fmtDateTime, 
 
 const TYPES: Record<EventType, string> = { CONCERT: 'Ca nhạc', MOVIE: 'Phim', SPORT: 'Thể thao', THEATER: 'Sân khấu' };
 
-type Form = { title: string; type: EventType; venue: string; startsAt: string; description: string };
+type Form = { title: string; type: EventType; venue: string; startsAt: string; description: string; hidden: boolean };
 
 /** ISO (UTC) → giá trị cho <input type="datetime-local"> theo giờ máy người dùng. */
 function toLocalInput(iso: string | null): string {
@@ -44,14 +44,14 @@ export function EventsPage() {
     setEditing(e);
     setTried(false);
     setForm(e === 'new'
-      ? { title: '', type: 'CONCERT', venue: '', startsAt: '', description: '' }
-      : { title: e.title, type: e.type, venue: e.venue ?? '', startsAt: toLocalInput(e.startsAt), description: e.description ?? '' });
+      ? { title: '', type: 'CONCERT', venue: '', startsAt: '', description: '', hidden: false }
+      : { title: e.title, type: e.type, venue: e.venue ?? '', startsAt: toLocalInput(e.startsAt), description: e.description ?? '', hidden: e.hidden });
   };
   const close = () => { setEditing(null); setForm(null); };
 
-  const f = form ?? { title: '', type: 'CONCERT' as EventType, venue: '', startsAt: '', description: '' };
+  const f = form ?? { title: '', type: 'CONCERT' as EventType, venue: '', startsAt: '', description: '', hidden: false };
   const errTitle = tried && !f.title.trim();
-  const set = (k: keyof Form) => (v: string) => setForm((old) => (old ? { ...old, [k]: v } : old));
+  const set = (k: keyof Form) => (v: string | boolean) => setForm((old) => (old ? { ...old, [k]: v } : old));
 
   const save = async () => {
     setTried(true);
@@ -59,6 +59,7 @@ export function EventsPage() {
     const input: EventInput = {
       title: f.title.trim(), type: f.type, venue: f.venue.trim() || null, description: f.description.trim() || null,
       startsAt: f.startsAt ? new Date(f.startsAt).toISOString() : null,
+      hidden: f.hidden,
     };
     setBusy(true);
     try {
@@ -120,7 +121,7 @@ export function EventsPage() {
             <tbody>
               {paged.slice.map((e) => (
                 <tr key={e.id}>
-                  <td className="strong">{e.title}</td>
+                  <td className="strong">{e.title}{e.hidden && <span className="a-hidden-tag" title="Khách không thấy trong danh sách">Ẩn</span>}</td>
                   <td className="soft">{TYPES[e.type]}</td>
                   <td className="soft">{e.venue ?? '—'}</td>
                   <td className="soft">{fmtDateTime(e.startsAt)}</td>
@@ -172,6 +173,10 @@ export function EventsPage() {
             <label htmlFor="ev-desc">Mô tả</label>
             <textarea id="ev-desc" className="a-input" value={f.description} maxLength={2000} onChange={(e) => set('description')(e.target.value)} />
           </div>
+          <label className="a-switch">
+            <input type="checkbox" checked={f.hidden} onChange={(e) => set('hidden')(e.target.checked)} />
+            <span><b>Ẩn khỏi khách</b> – không hiện trong danh sách sự kiện (vẫn mở/mua được qua đường dẫn). Dùng cho sự kiện load test.</span>
+          </label>
         </Drawer>
       )}
 

@@ -49,7 +49,20 @@ Tham số khác: `P95_MS=500`, `MAX_ERR_PCT=0.5`, `STOP_ON_FAIL=false` (chạy h
 | Tên | Làm gì | Ghi chú |
 |---|---|---|
 | `browse` | 40% danh sách sự kiện · 20% chi tiết · 20% hạng vé · 20% "Còn x/y" (inventory, Redis) | Chỉ đọc – an toàn cho prod. Cần ≥ 1 sự kiện đang bán |
-| (sau) `hold`, `checkout` | Giữ vé / mua đủ luồng | Cần tài khoản + sự kiện test + dọn dữ liệu – `docs/tasks/loadtest.md` |
+| `purchase` | **Mua vé end-to-end**: giữ vé → checkout → ngân hàng giả lập "thành công" → IPN → Kafka → CONFIRMED → hỏi `/api/tickets/bookings/{id}` tới khi có QR. 1 lượt = 1 vé ≈ 6 request | **Ghi dữ liệu** – chỉ qua nút bấm web (cần dữ liệu do loadtest-service chuẩn bị). Bậc tính theo **lượt mua/giây**; PASS thêm: ≥ 99% đơn có QR, p95 "tới lúc có QR" < 5 s. Tối đa 14′/lượt (token tài khoản test 15′) |
+
+### Kịch bản `purchase` – dữ liệu test
+Bấm chạy → loadtest-service (bằng token của ADMIN đang bấm):
+1. Tạo **sự kiện ẩn mới** "Load Test dd/MM HH:mm" (catalog `hidden=true` – không hiện trong danh sách khách, mở/mua được qua id)
+   + 1 hạng vé ON_SALE kho 1.000.000.
+2. Bật **cờ bỏ giới hạn 4 vé/tài khoản** cho đúng sự kiện đó: `PUT /api/bookings/admin/limit-bypass/{eventId}?minutes=N`
+   (bỏ cả khoá (tài khoản, sự kiện) để 1 tài khoản mua song song). Có hạn (≤ 120′) → service chết giữa chừng thì cờ tự tắt.
+   Sự kiện khác vẫn giữ giới hạn 4 vé. Xem cờ đang bật: `GET /api/bookings/admin/limit-bypass` (ADMIN).
+3. Tài khoản test `loadtest-buyer@unbutu.test` (mật khẩu: `LOADTEST_ACCOUNT_PASSWORD`, prod ở secret `unbutu/prod/loadtest-service`) – tự đăng ký nếu chưa có.
+
+Xong lượt: tắt cờ + hạng vé → PAUSED. Đơn/giao dịch/vé test **ở lại DB**, gắn `event_id` của sự kiện ẩn (cột `event_id` trong
+`loadtest_db.runs`). Biết trước: ngân hàng giả lập gửi IPN tuần tự ≤ 50/giây (`MockIpnSender.claimDue(50)` mỗi 1 s) → trần giả
+~50 lượt mua/giây cho tới khi sửa (VNPay thật gửi song song).
 
 ## Cách chạy trên prod & giới hạn của phép đo
 - k6 chạy **trên chính server** trong mạng `prod_default`, gọi thẳng `http://api-gateway:8080` → đo năng lực hệ thống,

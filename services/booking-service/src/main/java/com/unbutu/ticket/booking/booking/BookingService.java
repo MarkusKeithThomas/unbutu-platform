@@ -1,6 +1,7 @@
 package com.unbutu.ticket.booking.booking;
 
 import com.unbutu.ticket.booking.booking.BookingDtos.BookingPage;
+import com.unbutu.ticket.booking.loadtest.LimitBypass;
 import com.unbutu.ticket.booking.booking.BookingDtos.BookingView;
 import com.unbutu.ticket.booking.booking.BookingDtos.CreateBookingRequest;
 import com.unbutu.ticket.booking.booking.BookingDtos.EventView;
@@ -50,12 +51,14 @@ public class BookingService {
     private final Duration holdTtl;
     private final int maxPerUserEvent;
     private final long feePerTicket;
+    private final LimitBypass limitBypass;
 
     BookingService(BookingRepository bookings, PriceBook priceBook, InventoryClient inventory,
                    com.unbutu.ticket.booking.payment.PaymentClient payment, TransactionTemplate tx, Clock clock,
                    @Value("${booking.hold-ttl}") Duration holdTtl,
                    @Value("${booking.max-tickets-per-user-event}") int maxPerUserEvent,
-                   @Value("${booking.service-fee-per-ticket}") long feePerTicket) {
+                   @Value("${booking.service-fee-per-ticket}") long feePerTicket,
+                   LimitBypass limitBypass) {
         this.bookings = bookings;
         this.priceBook = priceBook;
         this.inventory = inventory;
@@ -65,6 +68,7 @@ public class BookingService {
         this.holdTtl = holdTtl;
         this.maxPerUserEvent = maxPerUserEvent;
         this.feePerTicket = feePerTicket;
+        this.limitBypass = limitBypass;
     }
 
     /** Kết quả tạo đơn: created=false nghĩa là trả lại đơn cũ (cùng Idempotency-Key). */
@@ -85,10 +89,14 @@ public class BookingService {
                 if (prev.isPresent()) {
                     return prev.get();
                 }
-                bookings.lockUserEvent(userId, req.eventId());
                 int n = items.values().stream().mapToInt(Integer::intValue).sum();
-                int already = bookings.countedTickets(userId, req.eventId());
-                if (already + n > maxPerUserEvent) {
+                // Sự kiện đang bật cờ load test → bỏ khoá + giới hạn (1 tài khoản test mua song song nhiều luồng).
+                boolean limited = !limitBypass.active(req.eventId());
+                if (limited) {
+                    bookings.lockUserEvent(userId, req.eventId());
+                }
+                int already = limited ? bookings.countedTickets(userId, req.eventId()) : 0;
+                if (limited && already + n > maxPerUserEvent) {
                     throw new BookingException(HttpStatus.UNPROCESSABLE_ENTITY, "LIMIT_EXCEEDED",
                             "Mỗi tài khoản mua tối đa " + maxPerUserEvent + " vé cho một sự kiện",
                             Map.of("limit", maxPerUserEvent, "remaining", Math.max(0, maxPerUserEvent - already)));

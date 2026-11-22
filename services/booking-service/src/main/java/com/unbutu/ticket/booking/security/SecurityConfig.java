@@ -4,7 +4,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
@@ -13,6 +12,11 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import java.util.Collection;
+import java.util.List;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -33,11 +37,24 @@ class SecurityConfig {
                 .csrf(csrf -> csrf.disable())   // chỉ Bearer token trong header
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/bookings/admin/**").hasRole("ADMIN")   // cờ load test
                         .requestMatchers("/api/bookings/**", "/api/bookings").authenticated()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
                         .anyRequest().denyAll())
-                .oauth2ResourceServer(rs -> rs.jwt(Customizer.withDefaults()))
+                .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(rolesConverter())))
                 .build();
+    }
+
+    /** claim roles → ROLE_* (principal vẫn là Jwt – @AuthenticationPrincipal Jwt không đổi). */
+    private static JwtAuthenticationConverter rolesConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            List<String> roles = jwt.getClaimAsStringList("roles");
+            Collection<GrantedAuthority> authorities = roles == null ? List.of()
+                    : roles.stream().<GrantedAuthority>map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList();
+            return authorities;
+        });
+        return converter;
     }
 
     @Bean

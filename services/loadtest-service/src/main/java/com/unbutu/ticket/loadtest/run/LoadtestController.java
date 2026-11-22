@@ -33,7 +33,8 @@ class LoadtestController {
     @PostMapping("/runs")
     ResponseEntity<RunDtos.RunSummary> start(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody RunDtos.RunRequest req) {
         String who = jwt.getClaimAsString("email") != null ? jwt.getClaimAsString("email") : jwt.getSubject();
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(runner.start(req, who));
+        // Token của ADMIN đang bấm: dùng ngay để chuẩn bị dữ liệu mua vé (tạo sự kiện ẩn, bật cờ) – không lưu lại DB.
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(runner.start(req, who, jwt.getTokenValue()));
     }
 
     /** Lượt đang chạy (số liệu trực tiếp); 204 nếu không có. */

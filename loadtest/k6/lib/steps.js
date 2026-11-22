@@ -1,4 +1,5 @@
-// Chạy tải theo BẬC: mỗi bậc = 1 scenario constant-arrival-rate (giữ đúng N request/giây trong STEP_TIME),
+// Chạy tải theo BẬC: mỗi bậc = 1 scenario constant-arrival-rate (giữ đúng N LƯỢT/giây trong STEP_TIME; browse: 1 lượt =
+// 1 request; purchase: 1 lượt = 1 lần mua đủ luồng ≈ 6–8 request),
 // các bậc nối tiếp nhau. Mỗi bậc có tiêu chí riêng → chấm PASS/FAIL từng bậc → "chịu được tới X rps".
 //
 // Biến môi trường (truyền qua `make loadtest …`):
@@ -8,7 +9,8 @@
 //   MAX_ERR_PCT  % lỗi tối đa (HTTP ≥ 400 hoặc lỗi mạng)            (mặc định 1)
 //   STOP_ON_FAIL true = dừng ngay khi 1 bậc FAIL (đỡ dồn tải vào prod) (mặc định true)
 //   MAX_RPS      trần an toàn: từ chối bậc lớn hơn                  (mặc định 2000)
-// Bậc PASS khi: p95 < P95_MS, lỗi < MAX_ERR_PCT, và k6 bắn đủ ≥ 95% số request (dropped_iterations < 5%).
+// Bậc PASS khi: p95 < P95_MS, lỗi < MAX_ERR_PCT, k6 bắn đủ ≥ 95% số lượt (dropped_iterations < 5%)
+// + mọi tiêu chí riêng của kịch bản (extraThresholds, vd. purchase: ≥ 99% đơn có vé QR).
 
 const STEPS = (__ENV.STEPS || '50,100,200').split(',').map((s) => Number(s.trim()));
 const STEP_TIME = __ENV.STEP_TIME || '30s';
@@ -40,8 +42,12 @@ export function stepName(i) {
   return `bac_${String(i + 1).padStart(2, '0')}_${STEPS[i]}rps`;
 }
 
-/** options của k6: scenarios theo bậc + thresholds theo từng bậc (lọc theo tag scenario tự gắn). */
-export function buildOptions() {
+/**
+ * options của k6: scenarios theo bậc + thresholds theo từng bậc (lọc theo tag scenario tự gắn).
+ * @param iterSeconds     ước lượng thời gian 1 lượt (s) – để cấp đủ người dùng ảo (VU ≈ rps × thời gian lượt)
+ * @param extraThresholds (sel) => { 'metric{scenario:..}': [...] } – tiêu chí riêng của kịch bản cho từng bậc
+ */
+export function buildOptions({ iterSeconds = 0.2, extraThresholds = () => ({}) } = {}) {
   validate();
   const scenarios = {};
   const thresholds = {};
@@ -54,8 +60,8 @@ export function buildOptions() {
       duration: `${STEP_SEC}s`,
       startTime: `${i * STEP_SEC}s`,
       // VU = số request đang chờ cùng lúc ≈ rps × độ trễ. Hết VU → k6 bỏ lượt (dropped_iterations) → bậc FAIL.
-      preAllocatedVUs: Math.min(Math.max(10, Math.ceil(rps * 0.2)), 500),
-      maxVUs: Math.min(Math.max(50, rps), 2000),
+      preAllocatedVUs: Math.min(Math.max(10, Math.ceil(rps * iterSeconds)), 1000),
+      maxVUs: Math.min(Math.max(50, Math.ceil(rps * iterSeconds * 4)), 4000),
       gracefulStop: '5s',
     };
     const abort = { abortOnFail: STOP_ON_FAIL, delayAbortEval: '10s' };
@@ -63,7 +69,9 @@ export function buildOptions() {
     thresholds[`http_req_duration${sel}`] = [{ threshold: `p(95)<${P95_MS}`, ...abort }];
     thresholds[`http_req_failed${sel}`] = [{ threshold: `rate<${MAX_ERR_PCT / 100}`, ...abort }];
     thresholds[`dropped_iterations${sel}`] = [`count<${Math.max(1, Math.ceil(rps * STEP_SEC * DROP_PCT / 100))}`];
-    thresholds[`http_reqs${sel}`] = ['count>=0']; // chỉ để summary có số request của bậc
+    thresholds[`http_reqs${sel}`] = ['count>=0']; // chỉ để summary/REST API có số request của bậc
+    thresholds[`iterations${sel}`] = ['count>=0']; // … và số lượt (rps của bậc tính theo lượt)
+    Object.assign(thresholds, extraThresholds(sel));
   });
   return {
     scenarios,
@@ -86,6 +94,7 @@ export function summary(data) {
     const sel = `{scenario:${stepName(i)}}`;
     const m = (k) => data.metrics[`${k}${sel}`];
     const reqs = m('http_reqs')?.values.count || 0;
+    const iters = m('iterations')?.values.count || 0;
     if (!reqs) {
       rows.push({ rps, ran: false });
       return;
@@ -93,12 +102,20 @@ export function summary(data) {
     const dur = m('http_req_duration');
     const failed = m('http_req_failed');
     const dropped = m('dropped_iterations');
-    const ok = [dur, failed, dropped].every((x) => !x || Object.values(x.thresholds || {}).every((t) => t.ok));
+    // PASS = MỌI threshold gắn với bậc này đều đạt (gồm tiêu chí riêng của kịch bản).
+    const ok = Object.entries(data.metrics)
+      .filter(([k]) => k.endsWith(sel))
+      .every(([, x]) => Object.values(x.thresholds || {}).every((t) => t.ok));
+    const ttq = m('time_to_ticket');
+    const issued = m('ticket_issued');
     const row = {
       rps,
       ran: true,
       pass: ok,
-      achievedRps: reqs / STEP_SEC,
+      achievedRps: iters / STEP_SEC,
+      httpRps: reqs / STEP_SEC,
+      ttqP95: ttq?.values['p(95)'],
+      ticketPct: issued ? issued.values.rate * 100 : undefined,
       p95: dur?.values['p(95)'],
       p99: dur?.values['p(99)'],
       errPct: (failed?.values.rate || 0) * 100,
@@ -121,7 +138,8 @@ export function summary(data) {
     }
     lines.push(
       pad(`${r.rps} rps`, 10) + pad(r.achievedRps.toFixed(0), 10) + pad(ms(r.p95), 10) + pad(ms(r.p99), 10) +
-        pad(`${r.errPct.toFixed(2)}%`, 8) + pad(r.dropped, 9) + (r.pass ? 'PASS' : 'FAIL'),
+        pad(`${r.errPct.toFixed(2)}%`, 8) + pad(r.dropped, 9) + (r.pass ? 'PASS' : 'FAIL') +
+        (r.ttqP95 !== undefined ? `   · tới lúc có QR p95 ${ms(r.ttqP95)}, ${r.ticketPct?.toFixed(1)}% đơn có vé` : ''),
     );
   }
   const firstFail = rows.find((r) => r.ran && !r.pass);
