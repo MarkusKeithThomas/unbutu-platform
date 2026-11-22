@@ -15,6 +15,7 @@ PORT_inventory-service    := 8083
 PORT_booking-service      := 8084
 PORT_payment-service      := 8085
 PORT_notification-service := 8086
+PORT_loadtest-service     := 8087
 
 ALL  := $(shell $(COMPOSE) config --services 2>/dev/null)
 APPS := $(filter-out $(INFRA),$(ALL))

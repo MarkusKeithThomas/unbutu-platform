@@ -202,6 +202,23 @@ services:
       <<: *otel-env
       OTEL_SERVICE_NAME: identity-service
 
+  # Nút bấm load test trên web (/admin/loadtest, chỉ ADMIN – LT-C). Chạy k6 (có sẵn trong image) như tiến trình con,
+  # bắn thẳng http://api-gateway:8080 trong network này. k6 chạy CÙNG MÁY với hệ thống bị đo → cpus: 1 để không tranh
+  # hết CPU (con số đo được là cận dưới). RAM: JVM ≤ 256 MB heap, phần còn lại cho k6 (~1 GB ở ~2000 rps).
+  # Secret: DB_PASSWORD (AWS, ADR-0004).
+  loadtest-service:
+    <<: *service
+    image: ${LOADTEST_SERVICE_IMAGE:?Thiếu LOADTEST_SERVICE_IMAGE trong images.env}
+    mem_limit: 1536m
+    cpus: 1
+    env_file:
+      - path: env/loadtest-service.env
+        format: raw
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: loadtest-service
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:+ExitOnOutOfMemoryError
+
   # UI tĩnh (nginx). Không phải Java → không dùng otel-env; gateway route mọi path không phải /api/** vào đây.
   frontend:
     <<: *service

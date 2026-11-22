@@ -201,6 +201,7 @@ Chỉ 1 môi trường trên server (`prod`) – không có staging vì laptop k
 |---|---|
 | prod: 7 service Spring Boot (~350–450 MB) + postgres + redis (~128 MB) + redpanda (limit 1,25 GB, đo ~100 MB) | ~4,5 GB |
 | observability: SigNoz – ClickHouse (limit ~2 GB) + OTel Collector + SigNoz UI/query (ADR-0006) | ~3 GB |
+| prod: `loadtest-service` (JVM ≤ 256 MB heap + k6, `mem_limit 1536m`, `cpus: 1`) – chỉ tốn nhiều khi đang chạy load test | ~0,3 GB lúc rảnh / ≤ 1,5 GB |
 | OS + Docker + Tailscale | ~1 GB |
 | **Tổng** | **~8 GB** (đo 2026-11-21: đang dùng 3,2 GB, còn 8,6 GB available) – còn ~3 GB dư cho S4 (§8) và đỉnh tải (S1 đã nằm trong SigNoz) và đỉnh tải; vẫn cân nhắc `-XX:+UseSerialGC`, giới hạn thread pool |
 
@@ -424,6 +425,10 @@ curl --resolve unbutu.tail3c11f4.ts.net:443:$IP https://unbutu.tail3c11f4.ts.net
 - [x] **Đường đọc của khách thiết kế cho 50k rps** (2026-11-21): API công khai catalog trả `Cache-Control: public, max-age=30, stale-while-revalidate` (CDN/edge gánh tải), URL không chứa thời gian/user (server tự lấy "now" làm tròn phút), phân trang Slice (không `COUNT`), 1 query có index, không N+1; API công khai không đọc token. Bước sau khi cần: cache trong app + read replica. Tồn kho realtime (A8b) tách sang inventory + Redis.
 - [x] **Thanh toán PAY-1** (2026-11-21): cổng giả lập nói đúng giao thức VNPay 2.1.0 (đổi sang sandbox = đổi cấu hình). IPN là nguồn sự thật; payment → `payment.result.v1` qua Outbox. Booking quyết toán trong consumer: gọi **đồng bộ** inventory `commit` / payment `refund` (cả hai idempotent, consumer retry vô hạn có backoff) – lệch có chủ đích so với thiết kế đích (`inventory.command.v1` qua Kafka) cho gọn; đổi sang command topic khi cần tách tải. Trả muộn: còn vé → `CONFIRMED`, hết vé → hoàn tiền; sổ cái inventory (`sold + n ≤ total`) là chốt chặn cuối chống oversell.
 - [x] **Cổng thanh toán = giả lập để luyện lỗi** (2026-11-21, người dùng chọn; không tích hợp VNPay sandbox): ngân hàng giả lập có sổ sách + hàng đợi IPN bền + querydr; lỗi thường gặp bật bằng env (`IpnFault` cắm thêm, mặc định happy case). Job đối soát (1′, treo > 2′) dùng querydr như với VNPay thật. Runbook `docs/runbooks/payment-drills.md`.
+- [x] **Nút bấm load test trên web** (2026-11-22, người dùng chọn – LT-C): trang `/admin/loadtest` (chỉ ADMIN, qua Funnel như các trang admin khác)
+  + `loadtest-service`: image có sẵn binary k6 (Dockerfile target `runtime-k6`), chạy k6 như **tiến trình con** – không mount `docker.sock`.
+  1 lượt/lúc, trần `LOADTEST_MAX_RPS` (2000) + tổng ≤ 30′, đọc số liệu trực tiếp qua REST API của k6 (127.0.0.1:6565), lịch sử ở `loadtest_db`.
+  Kịch bản k6 dùng chung với `make loadtest` (`loadtest/k6` đóng vào jar). Runbook `docs/runbooks/loadtest.md`.
 - [x] GitHub repo **public**: https://github.com/MarkusKeithThomas/unbutu-platform (commit author `chthuong` + email noreply GitHub).
 
 Còn mở:

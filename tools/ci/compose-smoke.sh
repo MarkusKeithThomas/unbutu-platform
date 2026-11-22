@@ -42,20 +42,27 @@ export FRONTEND_IMAGE=frontend:ci APP_VERSION=ci
 
 # ---------- 2. env/<service>.env – cùng tên biến với env-map prod ----------
 rand() { openssl rand -hex 16; }
-DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand); DB_BOOKING=$(rand); DB_PAYMENT=$(rand); DB_NOTIFICATION=$(rand)
+DB_CATALOG=$(rand); DB_IDENTITY=$(rand); DB_INVENTORY=$(rand); DB_BOOKING=$(rand); DB_PAYMENT=$(rand); DB_NOTIFICATION=$(rand); DB_LOADTEST=$(rand)
 JWT_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER 2>/dev/null | base64 | tr -d '\n')
 QR_KEY=$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -outform DER 2>/dev/null | base64 | tr -d '\n')   # cùng định dạng prod
 mkdir -p deploy/env
 cat >deploy/env/postgres.env <<ENV
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$(rand)
-SERVICE_DATABASES=catalog identity inventory booking payment notification
+SERVICE_DATABASES=catalog identity inventory booking payment notification loadtest
 CATALOG_DB_PASSWORD=$DB_CATALOG
 IDENTITY_DB_PASSWORD=$DB_IDENTITY
 INVENTORY_DB_PASSWORD=$DB_INVENTORY
 BOOKING_DB_PASSWORD=$DB_BOOKING
 PAYMENT_DB_PASSWORD=$DB_PAYMENT
 NOTIFICATION_DB_PASSWORD=$DB_NOTIFICATION
+LOADTEST_DB_PASSWORD=$DB_LOADTEST
+ENV
+cat >deploy/env/loadtest-service.env <<ENV
+ENVIRONMENT=prod
+DB_URL=jdbc:postgresql://postgres:5432/loadtest_db
+DB_USERNAME=loadtest
+DB_PASSWORD=$DB_LOADTEST
 ENV
 cat >deploy/env/notification-service.env <<ENV
 ENVIRONMENT=prod
@@ -176,6 +183,8 @@ expect "giữ vé hạng không tồn tại → 409" 409 -H "Authorization: Bear
 
 expect "vé của tôi không token → 401" 401 "$BASE/api/tickets/me"
 expect "vé của tôi (có token) → trang rỗng → 200" 200 -H "Authorization: Bearer $ACCESS" "$BASE/api/tickets/me"
+expect "load test không token → 401" 401 "$BASE/api/loadtest/config"
+expect "load test bằng tài khoản thường (không ADMIN) → 403" 403 -H "Authorization: Bearer $ACCESS" "$BASE/api/loadtest/config"
 expect "JWKS khoá QR (công khai) → 200" 200 "$BASE/api/tickets/.well-known/jwks.json"
 [[ $(jq -r '.keys[0].crv' <<<"$BODY") == P-256 && $(jq -r '.keys[0].d // "none"' <<<"$BODY") == none ]] \
     || fail "JWKS QR phải là P-256 và KHÔNG lộ private key (d) – body: ${BODY:0:200}"

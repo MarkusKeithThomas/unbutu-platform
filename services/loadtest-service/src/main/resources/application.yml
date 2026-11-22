@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: loadtest-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/loadtest_db}
+    username: ${DB_USERNAME:loadtest}
+    password: ${DB_PASSWORD:loadtest}
+    hikari:
+      maximum-pool-size: 3          # vài request/giây từ 1 trang quản trị
+  mvc:
+    problemdetails:
+      enabled: true
+
+loadtest:
+  jwt:
+    jwk-set-uri: ${IDENTITY_JWKS_URI:http://identity-service:8080/.well-known/jwks.json}
+    issuer: ${JWT_ISSUER:unbutu-identity}
+  k6-binary: ${K6_BINARY:/usr/local/bin/k6}
+  target-base-url: ${LOADTEST_TARGET_URL:http://api-gateway:8080}
+  max-rps: ${LOADTEST_MAX_RPS:2000}
+  max-duration: ${LOADTEST_MAX_DURATION:30m}
+  work-dir: ${LOADTEST_WORK_DIR:/tmp/loadtest}
+  api-port: 6565
+  poll-interval: 2s
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

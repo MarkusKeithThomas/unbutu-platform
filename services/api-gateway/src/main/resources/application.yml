@@ -33,6 +33,10 @@ spring:
               uri: ${services.notification.url}
               predicates:
                 - Path=/api/tickets/**
+            - id: loadtest                   # nút bấm load test – chỉ ADMIN (loadtest-service tự kiểm JWT)
+              uri: ${services.loadtest.url}
+              predicates:
+                - Path=/api/loadtest/**
             # UI (SPA, nginx): mọi path còn lại. order lớn → xét SAU các route /api/** ở trên.
             - id: frontend
               uri: ${services.frontend.url}
@@ -55,6 +59,8 @@ services:
     url: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
   notification:
     url: ${NOTIFICATION_SERVICE_URL:http://notification-service:8080}
+  loadtest:
+    url: ${LOADTEST_SERVICE_URL:http://loadtest-service:8080}
   frontend:
     url: ${FRONTEND_SERVICE_URL:http://frontend:8080}
 

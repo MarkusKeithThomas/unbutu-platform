@@ -14,9 +14,14 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       # Mỗi service 1 user + 1 database (xem postgres/init/01-create-service-databases.sh)
-      SERVICE_DATABASES: catalog identity inventory booking payment notification
+      SERVICE_DATABASES: catalog identity inventory booking payment notification loadtest
       CATALOG_DB_PASSWORD: catalog
       IDENTITY_DB_PASSWORD: identity
+      INVENTORY_DB_PASSWORD: inventory
+      BOOKING_DB_PASSWORD: booking
+      PAYMENT_DB_PASSWORD: payment
+      NOTIFICATION_DB_PASSWORD: notification
+      LOADTEST_DB_PASSWORD: loadtest
     volumes:
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
@@ -191,6 +196,38 @@ services:
       retries: 20
     mem_limit: 512m
 
+  # Nút bấm load test (/admin/loadtest). Image có k6 (target runtime-k6). Local bắn vào api-gateway trong network.
+  loadtest-service:
+    build:
+      context: ..
+      dockerfile: deploy/docker/service.Dockerfile
+      target: runtime-k6
+      args:
+        SERVICE: loadtest-service
+    image: loadtest-service:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/loadtest_db
+      DB_USERNAME: loadtest
+      DB_PASSWORD: loadtest
+      IDENTITY_JWKS_URI: ${IDENTITY_SERVICE_URL:-http://identity-service:8080}/.well-known/jwks.json
+      LOADTEST_TARGET_URL: http://api-gateway:8080
+      LOADTEST_MAX_RPS: "300"               # máy dev
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:+ExitOnOutOfMemoryError
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8087:8080"   # port cố định của loadtest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    cpus: 1
+
   catalog-service:
     build:
       context: ..
@@ -299,6 +336,7 @@ services:
       BOOKING_SERVICE_URL: ${BOOKING_SERVICE_URL:-http://booking-service:8080}
       PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL:-http://payment-service:8080}
       NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:8080}
+      LOADTEST_SERVICE_URL: ${LOADTEST_SERVICE_URL:-http://loadtest-service:8080}
       FRONTEND_SERVICE_URL: ${FRONTEND_SERVICE_URL:-http://frontend:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # container gọi ra máy Mac

@@ -77,7 +77,7 @@ export function buildOptions() {
 const pad = (s, n) => String(s).padEnd(n);
 const ms = (v) => (v === undefined ? '-' : `${Math.round(v)} ms`);
 
-/** Bảng PASS/FAIL theo bậc (in ra màn hình) + JSON (thư mục /out nếu có OUT_NAME). */
+/** Bảng PASS/FAIL theo bậc (in ra màn hình) + JSON (OUT_DIR, mặc định /out, nếu có OUT_NAME). loadtest-service đọc file này. */
 export function summary(data) {
   const rows = [];
   let passUpTo = 0;
@@ -135,7 +135,7 @@ export function summary(data) {
 
   const out = { stdout: lines.join('\n') };
   if (__ENV.OUT_NAME) {
-    out[`/out/${__ENV.OUT_NAME}.json`] = JSON.stringify(
+    out[`${__ENV.OUT_DIR || '/out'}/${__ENV.OUT_NAME}.json`] = JSON.stringify(
       { scenario: __ENV.SCENARIO, steps: rows, passUpToRps: passUpTo, criteria: { p95Ms: P95_MS, maxErrPct: MAX_ERR_PCT, dropPct: DROP_PCT, stepSec: STEP_SEC } },
       null,
       2,

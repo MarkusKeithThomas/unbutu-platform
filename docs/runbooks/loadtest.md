@@ -11,7 +11,19 @@ Bắn **đúng N request/giây** (rps) trong một khoảng thời gian (1 **b�
 
 Kết quả: **"PASS tới X rps"** = bậc cao nhất mà mọi bậc trước nó đều PASS. Mặc định dừng ngay khi 1 bậc FAIL (`STOP_ON_FAIL=true`).
 
-## Chạy
+## Chạy bằng nút bấm trên web (`/admin/loadtest`, chỉ ADMIN)
+Prod: `https://unbutu.tail3c11f4.ts.net/admin/loadtest` (hoặc qua UI Vercel) · local: `http://localhost:8080/admin/loadtest` (`make up`).
+1. Chọn kịch bản, các bậc rps (vd. `100,200,400,800`), thời gian mỗi bậc, ngưỡng p95/lỗi → **Chạy load test** → xác nhận.
+2. Trang tự cập nhật mỗi 2 s: rps thực tế vs mục tiêu, p95 (dồn từ đầu bậc) với vạch ngưỡng, bảng từng bậc, ô **"Chịu được X rps"**.
+3. **Dừng lượt đang chạy** bất cứ lúc nào (k6 vẫn chấm điểm các bậc đã chạy). Lịch sử: bảng cuối trang → **Xem**.
+
+Cách hoạt động: `loadtest-service` (image có binary k6) chạy `k6 run` như tiến trình con, bắn `http://api-gateway:8080`;
+đọc `GET /v1/metrics` của k6 (127.0.0.1:6565 trong container) mỗi 2 s; dừng = `PATCH /v1/status`; kết thúc → đọc bảng bậc
+(`OUT_DIR/result.json` do `handleSummary` ghi) → lưu `loadtest_db.runs`. An toàn: 1 lượt/lúc (409), trần `LOADTEST_MAX_RPS`
+(prod 2000, local 300), tổng ≤ `LOADTEST_MAX_DURATION` (30′), container `cpus: 1`. Service restart giữa chừng → lượt thành `ABORTED`.
+Giới hạn: p99 không có trong số liệu trực tiếp (REST API của k6 chỉ trả p90/p95) – có trong bảng cuối.
+
+## Chạy bằng lệnh (`make loadtest`)
 ```bash
 make loadtest                                        # prod, kịch bản browse, bậc 50,100,200 rps, mỗi bậc 30s
 make loadtest STEPS=100,200,400,800 STEP_TIME=30s    # tự chọn bậc
